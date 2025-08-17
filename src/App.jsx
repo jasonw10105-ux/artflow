@@ -27,7 +27,6 @@ function App() {
             <Route index element={<Home />} />
             <Route path="login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
-            <Route path="password" element={<PublicRoute><SetPassword /></PublicRoute>} />
             <Route path="artist/:artistId" element={<ArtistProfile />} />
             <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
             <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
