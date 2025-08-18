@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
@@ -18,27 +19,14 @@ const SetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
-  const [debugLogs, setDebugLogs] = useState([])
 
-  const logDebug = (msg, obj) => {
-    console.log(msg, obj)
-    setDebugLogs(prev => [...prev, { msg, obj }])
-  }
-
-  // Wait until auth context finishes loading
+  // Pre-fill email once session is ready
   useEffect(() => {
-    logDebug('Auth loading', authLoading)
-    logDebug('User state', user)
-
-    if (!authLoading) {
-      if (!user) {
-        toast.error('No active session found. Please request a new link.')
-        logDebug('Redirecting to register because no session found', window.location.href)
-        navigate('/register')
-      } else {
-        setEmail(user.email)
-        logDebug('Session found, email set', user.email)
-      }
+    if (!authLoading && user) {
+      setEmail(user.email)
+    } else if (!authLoading && !user) {
+      toast.error('No active session found. Please request a new link.')
+      navigate('/register')
     }
   }, [authLoading, user, navigate])
 
@@ -62,21 +50,23 @@ const SetPassword = () => {
 
     setLoading(true)
     try {
-      logDebug('Submitting password setup', formData)
-      await completeSignUp(formData.password, formData.userType, formData.bio)
+      await completeSignUp({
+        password: formData.password,
+        userType: formData.userType,
+        bio: formData.bio,
+        name: formData.name
+      })
       toast.success('Account setup complete!')
       navigate('/dashboard')
     } catch (error) {
       console.error('Error completing sign up:', error)
       toast.error(error.message || 'Failed to complete setup')
-      logDebug('Error object', error)
     } finally {
       setLoading(false)
     }
   }
 
-  if (authLoading) {
-    // Render a proper loading spinner until auth context resolves
+  if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -84,25 +74,17 @@ const SetPassword = () => {
     )
   }
 
-  // Only render the form if user exists
-  if (!user) {
-    return null // wait for redirect effect
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
       <div className="max-w-md w-full space-y-8">
-        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
-          Set your password
-        </h2>
+        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">Set your password</h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {/* Account Type */}
           <div className="space-y-4">
             <div>
-              <label htmlFor="userType" className="block text-sm font-medium text-gray-700">Account Type</label>
+              <label className="block text-sm font-medium text-gray-700">Account Type</label>
               <select
-                id="userType"
                 name="userType"
                 value={formData.userType}
                 onChange={handleChange}
@@ -115,9 +97,8 @@ const SetPassword = () => {
 
             {/* Name */}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">Full Name</label>
+              <label className="block text-sm font-medium text-gray-700">Full Name</label>
               <input
-                id="name"
                 name="name"
                 type="text"
                 required
@@ -130,11 +111,10 @@ const SetPassword = () => {
 
             {/* Bio */}
             <div>
-              <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700">
                 Bio {formData.userType === 'collector' ? '(Optional)' : ''}
               </label>
               <textarea
-                id="bio"
                 name="bio"
                 rows={3}
                 value={formData.bio}
@@ -150,10 +130,9 @@ const SetPassword = () => {
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+              <label className="block text-sm font-medium text-gray-700">Password</label>
               <div className="mt-1 relative">
                 <input
-                  id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
@@ -174,10 +153,9 @@ const SetPassword = () => {
 
             {/* Confirm Password */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
+              <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
               <div className="mt-1 relative">
                 <input
-                  id="confirmPassword"
                   name="confirmPassword"
                   type={showConfirmPassword ? 'text' : 'password'}
                   required
@@ -205,13 +183,6 @@ const SetPassword = () => {
             {loading ? 'Creating...' : 'Create Account'}
           </button>
         </form>
-
-        <div className="mt-6">
-          <h3 className="text-sm font-medium text-gray-700">Debug Logs</h3>
-          <pre className="text-xs bg-gray-100 p-2 max-h-64 overflow-auto">
-            {JSON.stringify(debugLogs, null, 2)}
-          </pre>
-        </div>
       </div>
     </div>
   )
