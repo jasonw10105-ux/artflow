@@ -13,22 +13,20 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [profileSubscription, setProfileSubscription] = useState(null)
 
+  // Initialize auth session
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // 1. Check URL hash for access_token from magic link
+        // 1. Handle magic link URL
         const hash = window.location.hash
         if (hash.includes('access_token')) {
           const params = new URLSearchParams(hash.replace('#', ''))
           const access_token = params.get('access_token')
           const refresh_token = params.get('refresh_token')
-
           if (access_token && refresh_token) {
-            const { data, error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token
-            })
+            const { data, error } = await supabase.auth.setSession({ access_token, refresh_token })
             if (error) throw error
             console.log('Magic link session set', data)
             window.history.replaceState({}, document.title, window.location.pathname)
@@ -36,7 +34,10 @@ export const AuthProvider = ({ children }) => {
         }
 
         // 2. Get current session
-        const { data: { session }, error } = await supabase.auth.getSession()
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
         if (error) throw error
         setUser(session?.user ?? null)
 
@@ -55,7 +56,7 @@ export const AuthProvider = ({ children }) => {
 
     initAuth()
 
-    // Listen to auth state changes
+    // 3. Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!session?.user) {
         await signOut()
@@ -69,14 +70,16 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       subscription.unsubscribe()
-      supabase.channel('profiles-changes').unsubscribe()
+      if (profileSubscription) profileSubscription.unsubscribe()
     }
   }, [])
 
+  // Subscribe to profile changes
   const subscribeToProfile = (userId) => {
-    supabase.channel('profiles-changes').unsubscribe()
-    supabase
-      .channel('profiles-changes')
+    if (profileSubscription) profileSubscription.unsubscribe()
+
+    const channel = supabase
+      .channel(`profiles-${userId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
@@ -86,8 +89,11 @@ export const AuthProvider = ({ children }) => {
         }
       )
       .subscribe()
+
+    setProfileSubscription(channel)
   }
 
+  // Fetch profile data
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
@@ -96,36 +102,36 @@ export const AuthProvider = ({ children }) => {
         return
       }
       setProfile(data)
-    } catch (error) {
-      console.error('Error fetching profile:', error)
+    } catch (err) {
+      console.error('Error fetching profile:', err)
       await signOut()
     }
   }
 
-  // --- Auth actions ---
-
+  // Sign up with magic link
   const signUp = async (email) => {
-    // Check if email already exists
+    // Check if email exists
     const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).single()
     if (existing) throw new Error('Email already exists. Please log in.')
 
     // Send magic link
     const { data, error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/set-password` }
+      options: { emailRedirectTo: `${window.location.origin}/set-password` },
     })
     if (error) throw error
     return data
   }
 
+  // Complete sign-up with password + profile
   const completeSignUp = async (password, userType, bio, name) => {
-    if (!user) throw new Error('No user session found')
+    if (!user) throw new Error('No active user session found')
 
-    // 1. Update password
+    // Update password
     const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
     if (authError) throw authError
 
-    // 2. Upsert profile
+    // Upsert profile
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .upsert({ id: user.id, email: user.email, user_type: userType, bio, name })
@@ -137,20 +143,23 @@ export const AuthProvider = ({ children }) => {
     return profileData
   }
 
+  // Sign in with email + password
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     return data
   }
 
+  // Sign out
   const signOut = async () => {
     setUser(null)
     setProfile(null)
-    supabase.channel('profiles-changes').unsubscribe()
+    if (profileSubscription) profileSubscription.unsubscribe()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }
 
+  // Update profile
   const updateProfile = async (updates) => {
     if (!user) throw new Error('No user logged in')
     const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
@@ -170,7 +179,7 @@ export const AuthProvider = ({ children }) => {
         signIn,
         signOut,
         updateProfile,
-        fetchProfile
+        fetchProfile,
       }}
     >
       {children}
