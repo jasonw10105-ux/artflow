@@ -21,7 +21,15 @@ const Settings = () => {
     email: '',
     tags: [],
     certificatePreference: 'digital',
-    headshotUrl: ''
+    headshotUrl: '',
+    country: 'South Africa', // default
+    city: '', // optional
+    social: {
+      instagram: '',
+      twitter: '',
+      linkedin: '',
+      website: ''
+    }
   })
   const [tagSearch, setTagSearch] = useState('')
   const [filteredTags, setFilteredTags] = useState(AVAILABLE_TAGS)
@@ -48,7 +56,10 @@ const Settings = () => {
         email: data.email || '',
         tags: data.tags || [],
         certificatePreference: data.certificatePreference || 'digital',
-        headshotUrl: data.headshotUrl || ''
+        headshotUrl: data.headshotUrl || '',
+        country: data.country || 'South Africa',
+        city: data.city || '',
+        social: data.social || { instagram: '', twitter: '', linkedin: '', website: '' }
       })
     }
 
@@ -75,10 +86,15 @@ const Settings = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setProfileData(prev => ({
-      ...prev,
-      [name]: value
-    }))
+    if (name.startsWith('social.')) {
+      const key = name.split('.')[1]
+      setProfileData(prev => ({
+        ...prev,
+        social: { ...prev.social, [key]: value }
+      }))
+    } else {
+      setProfileData(prev => ({ ...prev, [name]: value }))
+    }
   }
 
   const handleImageUpload = async (e) => {
@@ -116,7 +132,10 @@ const Settings = () => {
           shortBio: profileData.shortBio,
           tags: profileData.tags,
           certificatePreference: profileData.certificatePreference,
-          headshotUrl: profileData.headshotUrl
+          headshotUrl: profileData.headshotUrl,
+          country: profileData.country,
+          city: profileData.city,
+          social: profileData.social
         }])
       if (error) throw error
       toast.success('Profile updated successfully!')
@@ -197,6 +216,51 @@ const Settings = () => {
                 <p className="text-gray-500 text-sm">{profileData.shortBio.length}/200</p>
               </div>
 
+              {/* Location */}
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    name="country"
+                    value={profileData.country}
+                    onChange={handleInputChange}
+                    className="input w-full"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    City (optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={profileData.city}
+                    onChange={handleInputChange}
+                    className="input w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Social Links */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Social Media Links</label>
+                {['instagram','twitter','linkedin','website'].map(platform => (
+                  <div key={platform} className="mb-2">
+                    <input
+                      type="text"
+                      name={`social.${platform}`}
+                      placeholder={platform.charAt(0).toUpperCase() + platform.slice(1)}
+                      value={profileData.social[platform]}
+                      onChange={handleInputChange}
+                      className="input w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+
               {/* Tags */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -243,6 +307,7 @@ const Settings = () => {
                   <span>{loading ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
+
             </form>
           </div>
         </div>
