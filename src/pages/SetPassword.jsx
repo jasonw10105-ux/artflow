@@ -25,6 +25,7 @@ const SetPassword = () => {
     setDebugLogs(prev => [...prev, { msg, obj }])
   }
 
+  // Wait until auth context finishes loading
   useEffect(() => {
     logDebug('Auth loading', authLoading)
     logDebug('User state', user)
@@ -42,20 +43,18 @@ const SetPassword = () => {
   }, [authLoading, user, navigate])
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [e.target.name]: e.target.value
-    })
+    }))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match')
       return
     }
-
     if (formData.password.length < 6) {
       toast.error('Password must be at least 6 characters')
       return
@@ -77,11 +76,17 @@ const SetPassword = () => {
   }
 
   if (authLoading) {
+    // Render a proper loading spinner until auth context resolves
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
       </div>
     )
+  }
+
+  // Only render the form if user exists
+  if (!user) {
+    return null // wait for redirect effect
   }
 
   return (
