@@ -17,19 +17,36 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // 1. Check if URL has access_token (magic link)
+        const hash = window.location.hash
+        if (hash.includes('access_token')) {
+          const params = new URLSearchParams(hash.replace('#', ''))
+          const access_token = params.get('access_token')
+          const refresh_token = params.get('refresh_token')
+
+          if (access_token && refresh_token) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token
+            })
+            if (error) throw error
+            console.log('Magic link session set', data)
+            window.history.replaceState({}, document.title, window.location.pathname)
+          }
+        }
+
+        // 2. Get current session
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) throw error
+        setUser(session?.user ?? null)
 
         if (session?.user) {
-          setUser(session.user)
           await fetchProfile(session.user.id)
           subscribeToProfile(session.user.id)
-        } else {
-          setUser(null)
-          setProfile(null)
-        }
+        } else setProfile(null)
+
       } catch (err) {
-        console.error('Error getting session:', err.message)
+        console.error('Error initializing auth:', err)
       } finally {
         setLoading(false)
       }
@@ -43,7 +60,6 @@ export const AuthProvider = ({ children }) => {
           await signOut()
           return
         }
-
         setUser(session.user)
         await fetchProfile(session.user.id)
         subscribeToProfile(session.user.id)
@@ -59,75 +75,52 @@ export const AuthProvider = ({ children }) => {
 
   const subscribeToProfile = (userId) => {
     supabase.channel('profiles-changes').unsubscribe()
-
     supabase
       .channel('profiles-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-        async (payload) => {
-          if (payload.eventType === 'DELETE') {
-            await signOut()
-          } else if (payload.eventType === 'UPDATE') {
-            setProfile(payload.new)
-          }
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, async (payload) => {
+        if (payload.eventType === 'DELETE') await signOut()
+        else if (payload.eventType === 'UPDATE') setProfile(payload.new)
+      })
       .subscribe()
   }
 
   const fetchProfile = async (userId) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
       if (error || !data) {
         await signOut()
         return
       }
-
       setProfile(data)
-    } catch (err) {
-      console.error('Error fetching profile:', err.message)
+    } catch (error) {
+      console.error('Error fetching profile:', error)
       await signOut()
     }
   }
 
   const signUp = async (email) => {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/set-password` }
-    })
+    // 1. Check if email exists
+    const { data: existing, error: checkError } = await supabase.from('profiles').select('id').eq('email', email).single()
+    if (existing) {
+      throw new Error('Email already exists. Please log in.')
+    }
+    // 2. Send magic link
+    const { data, error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/set-password` } })
     if (error) throw error
     return data
   }
 
   const completeSignUp = async (password, userType, bio) => {
-    const sessionUser = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : user
-    if (!sessionUser) throw new Error('No active session found')
-
-    // Update password
+    if (!user) throw new Error('No user session found')
     const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
     if (authError) throw authError
-
-    // Upsert profile
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .upsert({
-        id: sessionUser.id,
-        email: sessionUser.email,
-        user_type: userType,
-        bio
-      })
+      .upsert({ id: user.id, email: user.email, user_type: userType, bio })
       .select()
       .single()
     if (profileError) throw profileError
-
     setProfile(profileData)
-    setUser(sessionUser)
     return profileData
   }
 
@@ -147,31 +140,14 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (updates) => {
     if (!user) throw new Error('No user logged in')
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.id)
-      .select()
-      .single()
+    const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
     if (error) throw error
-
     setProfile(data)
     return data
   }
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      profile,
-      loading,
-      signUp,
-      completeSignUp,
-      signIn,
-      signOut,
-      updateProfile,
-      fetchProfile
-    }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, completeSignUp, signIn, signOut, updateProfile, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   )
