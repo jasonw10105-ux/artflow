@@ -1,8 +1,10 @@
 // src/contexts/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../supabaseClient'
+import toast from 'react-hot-toast'
 
-const AuthContext = createContext({})
+const AuthContext = createContext()
+
 export const useAuth = () => useContext(AuthContext)
 
 export const AuthProvider = ({ children }) => {
@@ -10,101 +12,110 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Initialize session and auth listener
-  useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-      setLoading(false)
+  // --- Sign up (email only) ---
+  const signUp = async (email) => {
+    try {
+      const { data, error } = await supabase.auth.signUp(
+        { email },
+        { emailRedirectTo: `${window.location.origin}/set-password` }
+      )
+      return { data, error }
+    } catch (err) {
+      return { error: err }
     }
+  }
 
-    init()
+  // --- Send OTP / Magic Link ---
+  const sendOtp = async (email) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/set-password` }
+      })
+      return { data, error }
+    } catch (err) {
+      return { error: err }
+    }
+  }
+
+  // --- Complete signup by setting password and profile ---
+  const completeSignUp = async (password, userType, bio, name) => {
+    if (!user) throw new Error('No active session')
+
+    // 1. Update Supabase password
+    const { error: updateError } = await supabase.auth.updateUser({ password })
+    if (updateError) throw updateError
+
+    // 2. Update profiles table
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: user.id,
+          email: user.email,
+          name,
+          bio,
+          user_type: userType,
+          password_set: true
+        },
+        { onConflict: ['id'] }
+      )
+
+    if (profileError) throw profileError
+
+    // 3. Refresh profile
+    const { data: updatedProfile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+
+    if (fetchError) throw fetchError
+    setProfile(updatedProfile)
+  }
+
+  // --- Load user and profile on mount ---
+  useEffect(() => {
+    const session = supabase.auth.getSession().then(({ data }) => {
+      setUser(data?.session?.user ?? null)
+      setLoading(false)
+    })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (!session?.user) setProfile(null)
     })
 
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  // Fetch profile when user changes
+  // --- Load profile when user changes ---
   useEffect(() => {
-    if (!user) {
-      setProfile(null)
-      return
-    }
-
+    if (!user) return
     const fetchProfile = async () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single()
-
       if (error) {
-        console.error('Error fetching profile:', error)
-        return
+        if (error.code !== 'PGRST116') console.error(error)
+        setProfile(null)
+      } else {
+        setProfile(data)
       }
-
-      setProfile(data)
     }
-
     fetchProfile()
   }, [user])
 
-  // === OTP signup for email verification ===
-  const signUp = async (email) => {
-    return await supabase.auth.signInWithOtp({ email })
+  const value = {
+    user,
+    profile,
+    loading,
+    signUp,
+    sendOtp,
+    completeSignUp
   }
 
-  // Login with email/password
-  const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    setUser(data.user)
-    return data.user
-  }
-
-  // Complete signup: set password + update profile
-  const completeSignUp = async (password, userType, bio, name) => {
-    const { data, error } = await supabase.auth.updateUser({ password })
-    if (error) throw error
-
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: data.user.id,
-      email: data.user.email,
-      name,
-      bio,
-      user_type: userType,
-      password_set: true,
-      updated_at: new Date(),
-    })
-
-    if (profileError) throw profileError
-
-    setProfile({ name, bio, user_type: userType, password_set: true })
-    return data.user
-  }
-
-  const signOut = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-  }
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        loading,
-        signUp,
-        signIn,
-        completeSignUp,
-        signOut,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
