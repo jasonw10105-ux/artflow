@@ -98,4 +98,79 @@ export const AuthProvider = ({ children }) => {
   }
 
   const updateProfile = async (updates) => {
-    if (!user) throw new Error('
+    if (!user) throw new Error('No user logged in')
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    setProfile(data)
+    return data
+  }
+
+  const sendVerificationEmail = async (email) => {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/set-password` }
+    })
+    if (error) throw error
+    return data
+  }
+
+  const setPassword = async (email, password, userData) => {
+    const { data: userDataResponse, error: userError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', email)
+      .single()
+
+    if (userError && userError.code !== 'PGRST116') throw userError
+
+    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
+    if (authError) throw authError
+
+    if (userDataResponse) {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .update(userData)
+        .eq('email', email)
+        .select()
+        .single()
+      if (profileError) throw profileError
+      setProfile(profileData)
+    } else {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .insert([{ email, ...userData }])
+        .select()
+        .single()
+      if (profileError) throw profileError
+      setProfile(profileData)
+    }
+
+    return authData
+  }
+
+  const value = {
+    user,
+    profile,
+    loading,
+    signUp,
+    signIn,
+    signOut,
+    updateProfile,
+    fetchProfile,
+    sendVerificationEmail,
+    setPassword,
+  }
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
