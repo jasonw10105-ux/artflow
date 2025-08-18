@@ -10,7 +10,8 @@ import {
   User,
   ArrowLeft,
   ExternalLink,
-  FolderOpen
+  FolderOpen,
+  X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -59,7 +60,7 @@ const ArtistProfile = () => {
         .from('catalogues')
         .select(`
           *,
-          catalogue_artworks(
+          catalogue_artworks (
             artworks(id, image_url, title)
           )
         `)
@@ -69,9 +70,15 @@ const ArtistProfile = () => {
 
       if (cataloguesError) throw cataloguesError
 
+      // Ensure catalogue_artworks is always an array
+      const safeCatalogues = (cataloguesData || []).map(cat => ({
+        ...cat,
+        catalogue_artworks: cat.catalogue_artworks || []
+      }))
+
       setArtist(artistData)
       setArtworks(artworksData || [])
-      setCatalogues(cataloguesData || [])
+      setCatalogues(safeCatalogues)
     } catch (error) {
       console.error('Error fetching artist data:', error)
       toast.error('Artist not found')
@@ -217,28 +224,28 @@ const ArtistProfile = () => {
                   className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
                 >
                   <div className="grid grid-cols-3 gap-1 h-32">
-                    {catalogue.catalogue_artworks?.slice(0, 3).map((ca, index) => (
+                    {catalogue.catalogue_artworks.slice(0, 3).map((ca, index) => (
                       <img
                         key={index}
-                        src={ca.artworks.image_url}
-                        alt={ca.artworks.title}
+                        src={ca.artworks?.image_url || '/placeholder.png'}
+                        alt={ca.artworks?.title || 'Artwork'}
                         className="w-full h-full object-cover"
                       />
                     ))}
-                    {catalogue.catalogue_artworks?.length < 3 && (
+                    {catalogue.catalogue_artworks.length < 3 &&
                       [...Array(3 - catalogue.catalogue_artworks.length)].map((_, index) => (
                         <div key={index} className="bg-gray-100 flex items-center justify-center">
                           <Palette className="h-6 w-6 text-gray-400" />
                         </div>
                       ))
-                    )}
+                    }
                   </div>
                   
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-900 mb-1">{catalogue.title}</h3>
                     <p className="text-sm text-gray-600 mb-2">{catalogue.description}</p>
                     <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{catalogue.catalogue_artworks?.length || 0} artworks</span>
+                      <span>{catalogue.catalogue_artworks.length || 0} artworks</span>
                       <ExternalLink className="h-3 w-3" />
                     </div>
                   </div>
