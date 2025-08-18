@@ -7,7 +7,6 @@ import toast from 'react-hot-toast'
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
   const navigate = useNavigate()
-
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
@@ -18,18 +17,12 @@ const SetPassword = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
 
-  // ==========================
-  // Check session on load
-  // ==========================
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
         toast.error('No active session found. Please request a new magic link.')
         navigate('/register')
-      } else {
-        setEmail(user.email)
       }
     }
   }, [authLoading, user, navigate])
@@ -51,11 +44,6 @@ const SetPassword = () => {
       return
     }
 
-    if (!formData.name.trim()) {
-      toast.error('Full name is required')
-      return
-    }
-
     setLoading(true)
     try {
       await completeSignUp(formData.password, formData.userType, formData.bio, formData.name)
@@ -69,7 +57,7 @@ const SetPassword = () => {
     }
   }
 
-  if (authLoading) {
+  if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -193,10 +181,6 @@ const SetPassword = () => {
             {loading ? 'Creating...' : 'Create Account'}
           </button>
         </form>
-
-        <p className="mt-4 text-sm text-gray-600 text-center">
-          You are setting up your account for <strong>{email}</strong>
-        </p>
       </div>
     </div>
   )
