@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { supabase } from '../lib/supabase'
 
 const SetPassword = () => {
-  const { setPassword } = useAuth()
+  const { user, completeSignUp, loading: authLoading } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
-
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
@@ -17,50 +14,27 @@ const SetPassword = () => {
     bio: '',
     userType: 'artist'
   })
-  const [email, setEmail] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState('')
 
-  // Parse Supabase magic link token from URL hash
   useEffect(() => {
-    if (!location.hash) {
-      navigate('/register')
-      return
-    }
-
-    const hash = new URLSearchParams(location.hash.replace('#', ''))
-    const accessToken = hash.get('access_token')
-    const refreshToken = hash.get('refresh_token')
-    const type = hash.get('type')
-    const emailParam = hash.get('email')
-
-    if (!accessToken || type !== 'signup') {
-      toast.error('Invalid or expired link')
-      navigate('/register')
-      return
-    }
-
-    // Set session so user is authenticated
-    supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken
-    }).then(({ data, error }) => {
-      if (error) {
-        console.error('Error setting session:', error.message)
-        toast.error('Failed to authenticate. Please try again.')
+    if (!authLoading) {
+      if (!user) {
+        toast.error('No active session found. Please request a new link.')
         navigate('/register')
       } else {
-        setEmail(emailParam || data.user?.email || '')
+        setEmail(user.email)
       }
-    })
-  }, [location.hash, navigate])
+    }
+  }, [authLoading, user, navigate])
 
   const handleChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
+    setFormData({
+      ...formData,
       [e.target.name]: e.target.value
-    }))
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -78,18 +52,23 @@ const SetPassword = () => {
 
     setLoading(true)
     try {
-      await setPassword(email, formData.password, {
-        name: formData.name,
-        bio: formData.bio,
-        user_type: formData.userType
-      })
+      await completeSignUp(formData.password, formData.userType, formData.bio)
       toast.success('Account setup complete!')
-      navigate('/login')
+      navigate('/dashboard')
     } catch (error) {
-      toast.error(error.message || 'Failed to set password')
+      console.error(error)
+      toast.error(error.message || 'Failed to complete setup')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      </div>
+    )
   }
 
   return (
