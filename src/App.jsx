@@ -1,55 +1,120 @@
-// src/App.jsx
-import React from 'react'
-import { Routes, Route } from 'react-router-dom'
-import { Toaster } from 'react-hot-toast'
-import { AuthProvider } from './contexts/AuthContext'
+// src/contexts/AuthContext.jsx
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
 
-import Layout from './components/Layout'
-import Home from './pages/Home'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import SetPassword from './pages/SetPassword'
-import Dashboard from './pages/Dashboard'
-import ArtworkManagement from './pages/ArtworkManagement'
-import CatalogueManagement from './pages/CatalogueManagement'
-import PublicCatalogue from './pages/PublicCatalogue'
-import PrivateCatalogue from './pages/PrivateCatalogue'
-import ArtistProfile from './pages/ArtistProfile'
-import Settings from './pages/Settings'
-import ContactsManagement from "./pages/ContactsManagement"
+const AuthContext = createContext({})
 
-import ProtectedRoute from './components/ProtectedRoute'
-import PublicRoute from './components/PublicRoute'
+export const useAuth = () => useContext(AuthContext)
 
-function App() {
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // Initial session load + listener
+  useEffect(() => {
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user ?? null)
+      setLoading(false)
+    }
+    init()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  // Fetch profile whenever user changes
+  useEffect(() => {
+    if (!user) {
+      setProfile(null)
+      return
+    }
+
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Error fetching profile:', error)
+        return
+      }
+
+      setProfile(data)
+    }
+
+    fetchProfile()
+  }, [user])
+
+  // ----------------------
+  // OTP Login Flow
+  // ----------------------
+
+  // Send OTP to email
+  const sendOtp = async (email) => {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin + '/verify-otp' }
+    })
+    return { data, error }
+  }
+
+  // Verify OTP by reloading session (Supabase automatically signs in if OTP link clicked)
+  const verifyOtp = async (email, _otp) => {
+    // Supabase handles OTP via email link automatically
+    // You just need to refresh session
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) throw error
+    if (!session?.user) throw new Error('OTP verification failed.')
+    setUser(session.user)
+    return session.user
+  }
+
+  // Complete signup: set password + update profile
+  const completeSignUp = async (password, userType, bio, name) => {
+    const { data, error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: data.user.id,
+      email: data.user.email,
+      name,
+      bio,
+      user_type: userType,
+      password_set: true,
+      updated_at: new Date(),
+    })
+
+    if (profileError) throw profileError
+
+    setProfile({ name, bio, user_type: userType, password_set: true })
+    return data.user
+  }
+
+  const signOut = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setProfile(null)
+  }
+
   return (
-    <AuthProvider>
-      <Toaster position="top-right" />
-      <Routes>
-        {/* Public Layout */}
-        <Route element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="login" element={<PublicRoute><Login /></PublicRoute>} />
-          <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
-          <Route path="set-password" element={<SetPassword />} />
-          <Route path="artist/:artistId" element={<ArtistProfile />} />
-          <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
-          <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
-        </Route>
-
-        {/* Protected Layout */}
-        <Route path="/dashboard/*" element={<ProtectedRoute />}>
-          <Route element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="artworks" element={<ArtworkManagement />} />
-            <Route path="catalogues" element={<CatalogueManagement />} />
-            <Route path="contacts" element={<ContactsManagement />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-        </Route>
-      </Routes>
-    </AuthProvider>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        sendOtp,
+        verifyOtp,
+        completeSignUp,
+        signOut,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   )
 }
-
-export default App
