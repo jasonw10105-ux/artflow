@@ -5,9 +5,7 @@ const AuthContext = createContext({})
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
   return context
 }
 
@@ -48,7 +46,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Supabase handles magic-link + session automatically
         const {
           data: { session },
           error
@@ -92,15 +89,28 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
-  const signUp = async (email, password) => {
-    const { error } = await supabase.auth.signUp({
+  // Magic-link signup (no password yet)
+  const signUp = async (email) => {
+    const { data, error } = await supabase.auth.signInWithOtp({
       email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/set-password`, // MUST match Supabase settings
-      },
+      options: { emailRedirectTo: `${window.location.origin}/set-password` },
     })
     if (error) throw error
+    return data
+  }
+
+  // Complete signup by setting password
+  const completeSignUp = async (password) => {
+    if (!user) throw new Error('No user session found')
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+    return true
+  }
+
+  const signIn = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    return data
   }
 
   const signOut = async () => {
@@ -111,7 +121,9 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, signUp, completeSignUp, signIn, signOut, fetchProfile }}
+    >
       {children}
     </AuthContext.Provider>
   )
