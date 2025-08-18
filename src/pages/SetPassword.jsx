@@ -20,42 +20,45 @@ const SetPassword = () => {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
 
-  // Pre-fill email once session is ready
+  // ==========================
+  // Check session on load
+  // ==========================
   useEffect(() => {
-    if (!authLoading && user) {
-      setEmail(user.email)
-    } else if (!authLoading && !user) {
-      toast.error('No active session found. Please request a new link.')
-      navigate('/register')
+    if (!authLoading) {
+      if (!user) {
+        toast.error('No active session found. Please request a new magic link.')
+        navigate('/register')
+      } else {
+        setEmail(user.email)
+      }
     }
   }, [authLoading, user, navigate])
 
   const handleChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }))
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match')
       return
     }
+
     if (formData.password.length < 6) {
       toast.error('Password must be at least 6 characters')
       return
     }
 
+    if (!formData.name.trim()) {
+      toast.error('Full name is required')
+      return
+    }
+
     setLoading(true)
     try {
-      await completeSignUp({
-        password: formData.password,
-        userType: formData.userType,
-        bio: formData.bio,
-        name: formData.name
-      })
+      await completeSignUp(formData.password, formData.userType, formData.bio, formData.name)
       toast.success('Account setup complete!')
       navigate('/dashboard')
     } catch (error) {
@@ -66,7 +69,7 @@ const SetPassword = () => {
     }
   }
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -77,14 +80,17 @@ const SetPassword = () => {
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
       <div className="max-w-md w-full space-y-8">
-        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">Set your password</h2>
+        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
+          Set your password
+        </h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {/* Account Type */}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Account Type</label>
+              <label htmlFor="userType" className="block text-sm font-medium text-gray-700">Account Type</label>
               <select
+                id="userType"
                 name="userType"
                 value={formData.userType}
                 onChange={handleChange}
@@ -97,8 +103,9 @@ const SetPassword = () => {
 
             {/* Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Full Name</label>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700">Full Name</label>
               <input
+                id="name"
                 name="name"
                 type="text"
                 required
@@ -111,10 +118,11 @@ const SetPassword = () => {
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
                 Bio {formData.userType === 'collector' ? '(Optional)' : ''}
               </label>
               <textarea
+                id="bio"
                 name="bio"
                 rows={3}
                 value={formData.bio}
@@ -130,9 +138,10 @@ const SetPassword = () => {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Password</label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
               <div className="mt-1 relative">
                 <input
+                  id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
@@ -153,9 +162,10 @@ const SetPassword = () => {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
               <div className="mt-1 relative">
                 <input
+                  id="confirmPassword"
                   name="confirmPassword"
                   type={showConfirmPassword ? 'text' : 'password'}
                   required
@@ -183,6 +193,10 @@ const SetPassword = () => {
             {loading ? 'Creating...' : 'Create Account'}
           </button>
         </form>
+
+        <p className="mt-4 text-sm text-gray-600 text-center">
+          You are setting up your account for <strong>{email}</strong>
+        </p>
       </div>
     </div>
   )
