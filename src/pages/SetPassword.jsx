@@ -14,7 +14,7 @@ const SetPassword = () => {
     confirmPassword: '',
     name: '',
     bio: '',
-    userType: 'artist',
+    userType: [], // Array to hold multiple roles
   })
 
   const [showPassword, setShowPassword] = useState(false)
@@ -34,8 +34,20 @@ const SetPassword = () => {
     }
   }, [authLoading, user, profile, navigate])
 
-  const handleChange = (e) =>
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target
+
+    if (name === 'userType') {
+      setFormData((prev) => {
+        const types = new Set(prev.userType)
+        if (checked) types.add(value)
+        else types.delete(value)
+        return { ...prev, userType: Array.from(types) }
+      })
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }))
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -52,12 +64,16 @@ const SetPassword = () => {
       toast.error('Name is required')
       return
     }
+    if (!formData.userType.length) {
+      toast.error('Please select at least one account type')
+      return
+    }
 
     setLoading(true)
     try {
       await completeSignUp(
         formData.password,
-        formData.userType,
+        formData.userType, // Pass array of roles
         formData.bio,
         formData.name
       )
@@ -118,21 +134,35 @@ const SetPassword = () => {
             />
           </div>
 
-          {/* User Type */}
+          {/* User Type (Checkboxes) */}
           <div>
-            <label htmlFor="userType" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700">
               Account Type
             </label>
-            <select
-              id="userType"
-              name="userType"
-              value={formData.userType}
-              onChange={handleChange}
-              className="input mt-1"
-            >
-              <option value="artist">Artist</option>
-              <option value="collector">Collector</option>
-            </select>
+            <div className="flex gap-4 mt-1">
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="userType"
+                  value="artist"
+                  checked={formData.userType.includes('artist')}
+                  onChange={handleChange}
+                  className="mr-2"
+                />
+                Artist
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="userType"
+                  value="collector"
+                  checked={formData.userType.includes('collector')}
+                  onChange={handleChange}
+                  className="mr-2"
+                />
+                Collector
+              </label>
+            </div>
           </div>
 
           {/* Password */}
