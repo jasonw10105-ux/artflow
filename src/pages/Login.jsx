@@ -5,7 +5,7 @@ import { Eye, EyeOff, Palette } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const Login = () => {
-  const { signIn, needsPasswordSetup } = useAuth()
+  const { signIn, checkNeedsPasswordSetup } = useAuth()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -22,8 +22,9 @@ const Login = () => {
     try {
       await signIn(formData.email, formData.password)
 
-      // If user is verified but has no password → redirect to set-password
-      if (needsPasswordSetup) {
+      // Check if user has password set
+      const needsPassword = await checkNeedsPasswordSetup(formData.email)
+      if (needsPassword) {
         toast('Please set your password to continue')
         navigate('/set-password')
         return
@@ -32,10 +33,8 @@ const Login = () => {
       toast.success('Welcome back!')
       navigate('/dashboard')
     } catch (error) {
-      if (error.message.includes('User not allowed') || error.message.includes('Email not confirmed')) {
+      if (error.message.includes('Email not confirmed')) {
         toast.error('Please verify your email before logging in.')
-      } else if (error.message.includes('Invalid login credentials')) {
-        toast.error('Invalid credentials. Check your email and password.')
       } else {
         toast.error(error.message || 'Failed to sign in')
       }
