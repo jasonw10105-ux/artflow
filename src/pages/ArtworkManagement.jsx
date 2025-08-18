@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Plus, Edit, Trash2, Upload, Save, Image as ImageIcon } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Upload,
+  Image as ImageIcon,
+  X
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ArtworkManagement = () => {
@@ -9,11 +16,12 @@ const ArtworkManagement = () => {
 
   const [mode, setMode] = useState('manage') // 'manage' | 'create'
   const [artworks, setArtworks] = useState([])
-  const [pendingArtworks, setPendingArtworks] = useState([]) // images uploaded but not yet saved
+  const [pendingArtworks, setPendingArtworks] = useState([]) // uploaded but not yet saved
   const [selectedPending, setSelectedPending] = useState(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [formData, setFormData] = useState(initialFormData())
+  const [modalOpen, setModalOpen] = useState(false)
 
   function initialFormData() {
     return {
@@ -31,14 +39,14 @@ const ArtworkManagement = () => {
     }
   }
 
-  // Fetch artworks
   useEffect(() => {
     if (profile) fetchArtworks()
   }, [profile])
 
+  // Warn if there are unsaved pending artworks
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (pendingArtworks.some(a => !a.saved)) {
+      if (pendingArtworks.length > 0) {
         e.preventDefault()
         e.returnValue = 'You have unsaved artworks. Refreshing will lose them.'
       }
@@ -54,7 +62,6 @@ const ArtworkManagement = () => {
         .select('*')
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
-
       if (error) throw error
       setArtworks(data || [])
     } catch (error) {
@@ -89,10 +96,9 @@ const ArtworkManagement = () => {
           if (error) throw error
 
           const { data: { publicUrl } } = supabase.storage.from('artworks').getPublicUrl(fileName)
-          return { image_url: publicUrl, temp: true, saved: false }
+          return { image_url: publicUrl, temp: true }
         })
       )
-
       const validUploads = uploads.filter(Boolean)
       setPendingArtworks(prev => [...prev, ...validUploads])
       if (!selectedPending && validUploads.length > 0) {
@@ -100,6 +106,7 @@ const ArtworkManagement = () => {
         setFormData({ ...initialFormData(), image_url: validUploads[0].image_url })
       }
       toast.success('Images uploaded. Select each to add details.')
+      setModalOpen(false)
     } catch (err) {
       console.error(err)
       toast.error('Upload failed')
@@ -113,12 +120,17 @@ const ArtworkManagement = () => {
     setFormData({ ...initialFormData(), ...art })
   }
 
-  const isArtworkComplete = (data) => {
-    return data.title && data.year && data.image_url
+  const removePendingArtwork = (art) => {
+    setPendingArtworks(prev => prev.filter(p => p.image_url !== art.image_url))
+    if (selectedPending?.image_url === art.image_url) {
+      const next = pendingArtworks.find(p => p.image_url !== art.image_url)
+      if (next) selectPendingArtwork(next)
+      else setSelectedPending(null)
+    }
   }
 
   const handleSave = async () => {
-    if (!isArtworkComplete(formData)) {
+    if (!formData.title || !formData.year || !formData.image_url) {
       toast.error('Title, Year, and Image are required')
       return
     }
@@ -133,66 +145,45 @@ const ArtworkManagement = () => {
         year: parseInt(formData.year)
       }
 
-      const { error } = await supabase.from('artworks').insert([artworkData])
+      const { error } = await supabase.from('artworks').upsert([artworkData])
       if (error) throw error
 
       toast.success('Artwork saved successfully')
 
-      // Mark current pending as saved
-      setPendingArtworks(prev =>
-        prev.map(p => p.image_url === selectedPending.image_url ? { ...p, saved: true } : p)
-      )
+      // Remove from pending if it exists there
+      setPendingArtworks(prev => prev.filter(p => p.image_url !== selectedPending.image_url))
+      setSelectedPending(null)
+      setFormData(initialFormData())
 
-      // Decide next action
-      const unsavedArtworks = pendingArtworks.filter(p => !p.saved)
-      if (unsavedArtworks.length === 0) {
-        // All done → back to grid
-        setMode('manage')
-        setSelectedPending(null)
-        setFormData(initialFormData())
-        fetchArtworks()
-      } else {
-        // Move to next unsaved artwork
-        const nextArt = unsavedArtworks.find(p => p.image_url !== selectedPending.image_url) || unsavedArtworks[0]
-        selectPendingArtwork(nextArt)
-      }
+      fetchArtworks()
     } catch (err) {
       console.error(err)
       toast.error('Failed to save artwork')
     }
   }
 
-  const handleDelete = async (artwork) => {
-    if (!confirm('Are you sure you want to delete this artwork?')) return
+  const handleDeleteArtwork = async (artwork) => {
+    if (!window.confirm('Are you sure you want to delete this artwork?')) return
 
     try {
-      if (!artwork.saved) {
-        // Just remove from pending
-        setPendingArtworks(prev => prev.filter(p => p.image_url !== artwork.image_url))
-        if (selectedPending?.image_url === artwork.image_url) {
-          setSelectedPending(pendingArtworks[0] || null)
-        }
-      } else {
-        const { error } = await supabase.from('artworks').delete().eq('id', artwork.id)
-        if (error) throw error
-        toast.success('Artwork deleted successfully')
-        fetchArtworks()
-      }
+      // Delete from storage first
+      const pathParts = artwork.image_url.split('/')
+      const filePath = pathParts.slice(pathParts.indexOf(profile.id)).join('/')
+      const { error } = await supabase.storage.from('artworks').remove([filePath])
+      if (error) throw error
+
+      const { error: dbError } = await supabase.from('artworks').delete().eq('id', artwork.id)
+      if (dbError) throw dbError
+
+      toast.success('Artwork deleted')
+      fetchArtworks()
     } catch (err) {
       console.error(err)
       toast.error('Failed to delete artwork')
     }
   }
 
-  if (loading) {
-    return <div className="p-6">Loading...</div>
-  }
-
-  const allCompleted = pendingArtworks.every(isArtworkComplete)
-  const buttonLabel = (() => {
-    if (pendingArtworks.length === 1 || (allCompleted && pendingArtworks.length > 0)) return 'Save & Finish'
-    return 'Save'
-  })()
+  if (loading) return <div className="p-6">Loading...</div>
 
   return (
     <div className="p-6 max-w-7xl mx-auto flex gap-6">
@@ -201,7 +192,7 @@ const ArtworkManagement = () => {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900">Artwork Management</h1>
             <button
-              onClick={() => setMode('create')}
+              onClick={() => setModalOpen(true)}
               className="btn-primary flex items-center space-x-2"
             >
               <Plus className="h-5 w-5" />
@@ -218,7 +209,7 @@ const ArtworkManagement = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {artworks.map((artwork) => (
-                <div key={artwork.id} className="card overflow-hidden">
+                <div key={artwork.id} className="card overflow-hidden relative">
                   <img src={artwork.image_url} alt={artwork.title} className="w-full h-48 object-cover" />
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-900 mb-1">{artwork.title}</h3>
@@ -226,13 +217,16 @@ const ArtworkManagement = () => {
                     <div className="flex justify-between items-center">
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => toast('Editing not implemented yet in manage mode')}
+                          onClick={() => {
+                            setMode('create')
+                            selectPendingArtwork({ ...artwork, temp: false })
+                          }}
                           className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(artwork)}
+                          onClick={() => handleDeleteArtwork(artwork)}
                           className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -256,21 +250,23 @@ const ArtworkManagement = () => {
               {pendingArtworks.map((art, idx) => (
                 <div
                   key={idx}
-                  className={`border rounded overflow-hidden cursor-pointer flex items-center justify-between p-1 ${selectedPending?.image_url === art.image_url ? 'ring-2 ring-primary-500' : ''}`}
-                  onClick={() => selectPendingArtwork(art)}
+                  className={`border rounded overflow-hidden cursor-pointer p-1 relative ${selectedPending?.image_url === art.image_url ? 'ring-2 ring-primary-500' : ''}`}
                 >
-                  <img src={art.image_url} className="w-16 h-16 object-cover" />
-                  <span className="text-sm ml-2">{isArtworkComplete(art) ? '✅' : '⚠️'}</span>
+                  <img src={art.image_url} className="w-full h-24 object-cover" />
+                  <button
+                    className="absolute top-1 right-1 p-1 bg-white rounded-full shadow hover:bg-red-100"
+                    onClick={() => removePendingArtwork(art)}
+                  >
+                    <X className="h-3 w-3 text-red-600" />
+                  </button>
+                  <div className="text-xs text-right">
+                    {art.title && art.year ? '✅ Ready' : '⚠️ Incomplete'}
+                  </div>
+                  <div onClick={() => selectPendingArtwork(art)} className="absolute inset-0 cursor-pointer"></div>
                 </div>
               ))}
-              {pendingArtworks.length === 0 && (
-                <p className="text-gray-500 text-sm">No pending artworks. Upload some!</p>
-              )}
+              {pendingArtworks.length === 0 && <p className="text-gray-500 text-sm">No pending artworks. Upload some!</p>}
             </div>
-            <label className="btn-primary mt-4 flex items-center justify-center cursor-pointer">
-              <Upload className="h-4 w-4 mr-2" /> Add More Works
-              <input type="file" multiple className="hidden" accept="image/*" onChange={handleMultipleUpload} disabled={uploading} />
-            </label>
           </div>
 
           {/* Main Form */}
@@ -282,19 +278,19 @@ const ArtworkManagement = () => {
                   <div>
                     <img src={formData.image_url} className="w-full h-64 object-cover rounded" />
                   </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* form fields */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                       <input type="text" name="title" value={formData.title} onChange={handleInputChange} className="input w-full" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Medium</label>
-                      <input type="text" name="medium" value={formData.medium} onChange={handleInputChange} className="input w-full" placeholder="Oil on canvas, Digital, etc." />
+                      <input type="text" name="medium" value={formData.medium} onChange={handleInputChange} className="input w-full" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Dimensions</label>
-                      <input type="text" name="dimensions" value={formData.dimensions} onChange={handleInputChange} className="input w-full" placeholder="24 x 36 inches" />
+                      <input type="text" name="dimensions" value={formData.dimensions} onChange={handleInputChange} className="input w-full" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Year *</label>
@@ -328,8 +324,9 @@ const ArtworkManagement = () => {
                   </div>
 
                   <div className="mt-4 flex space-x-2">
-                    <button onClick={handleSave} className="btn-primary">{buttonLabel}</button>
-                    {pendingArtworks.length > 1 && <button onClick={() => setMode('manage')} className="btn-secondary">Return to Grid</button>}
+                    <button onClick={handleSave} className="btn-primary">
+                      {pendingArtworks.length <= 1 ? 'Save & Finish' : 'Save'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -338,6 +335,21 @@ const ArtworkManagement = () => {
             )}
           </div>
         </>
+      )}
+
+      {/* Modal for bulk upload */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 relative">
+            <button className="absolute top-2 right-2" onClick={() => setModalOpen(false)}><X /></button>
+            <h2 className="text-lg font-semibold mb-4">Upload Images</h2>
+            <label className="btn-primary flex items-center justify-center cursor-pointer w-full py-2">
+              <Upload className="mr-2 h-4 w-4" /> Choose Images
+              <input type="file" multiple accept="image/*" className="hidden" onChange={handleMultipleUpload} disabled={uploading} />
+            </label>
+            {uploading && <p className="mt-2 text-sm text-gray-500">Uploading...</p>}
+          </div>
+        </div>
       )}
     </div>
   )
