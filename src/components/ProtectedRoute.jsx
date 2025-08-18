@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
 
   if (loading) {
     return (
@@ -13,7 +13,8 @@ const ProtectedRoute = ({ children }) => {
     )
   }
 
-  if (!user) {
+  // Redirect if no auth user or profile missing (deleted)
+  if (!user || !profile) {
     return <Navigate to="/login" replace />
   }
 
