@@ -1,5 +1,7 @@
+// src/pages/Register.jsx
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
@@ -12,34 +14,73 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+
     try {
-      const result = await signUp(email)
-      if (result.redirectTo) navigate(result.redirectTo)
-      else toast.success('Check your email for the verification link!')
-    } catch (err) {
-      toast.error(err.message)
+      // Check if email exists in Supabase Auth
+      const { data: existingUser, error: fetchError } = await supabase.auth.getUserByEmail(email)
+      if (fetchError) throw fetchError
+
+      if (existingUser?.user) {
+        // Check if user has a password
+        const hasPassword = existingUser.user.password_hash ? true : false
+        if (hasPassword) {
+          toast.success('User already exists. Redirecting to login...')
+          setTimeout(() => navigate('/login'), 1500)
+          return
+        } else {
+          // User exists but no password → send magic link
+          await signUp(email)
+          toast.success('Check your email to verify. Then set your password.')
+          navigate('/set-password')
+          return
+        }
+      }
+
+      // New user → create magic link
+      await signUp(email)
+      toast.success('Check your email for the magic link to set your password.')
+      navigate('/set-password')
+    } catch (error) {
+      console.error('Registration error:', error)
+      toast.error(error.message || 'Registration failed')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <form className="bg-white p-8 rounded shadow-md w-full max-w-md" onSubmit={handleSubmit}>
-        <h2 className="text-2xl font-bold mb-6">Register</h2>
-        <label className="block mb-2">Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="input w-full mb-4"
-          placeholder="Enter your email"
-          required
-        />
-        <button disabled={loading} className="btn-primary w-full">
-          {loading ? 'Sending...' : 'Register'}
-        </button>
-      </form>
+    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
+      <div className="max-w-md w-full space-y-8">
+        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
+          Create an account
+        </h2>
+
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              Email address
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input mt-1"
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Submitting...' : 'Register'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
