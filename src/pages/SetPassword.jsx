@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
 
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
@@ -19,22 +20,37 @@ const SetPassword = () => {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
 
+  // Handle magic link
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        toast.error('No active session found. Please request a new link.')
+    const handleMagicLink = async () => {
+      const hash = window.location.hash
+      if (hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.replace('#', ''))
+        const access_token = params.get('access_token')
+        if (access_token) {
+          const { data, error } = await supabase.auth.setSession({ access_token })
+          if (error) {
+            toast.error('Failed to set session from magic link')
+            navigate('/register')
+          } else {
+            setEmail(data.user.email)
+          }
+        }
+      } else if (hash.includes('error')) {
+        const params = new URLSearchParams(hash.replace('#', ''))
+        const errorDescription = params.get('error_description')
+        toast.error(errorDescription || 'Magic link error')
         navigate('/register')
-      } else {
+      } else if (user) {
         setEmail(user.email)
       }
     }
-  }, [authLoading, user, navigate])
+
+    handleMagicLink()
+  }, [user, navigate])
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
+    setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
   const handleSubmit = async (e) => {
@@ -63,7 +79,7 @@ const SetPassword = () => {
     }
   }
 
-  if (authLoading || !user) {
+  if (authLoading || !email) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -80,6 +96,7 @@ const SetPassword = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
+            {/* Account Type */}
             <div>
               <label htmlFor="userType" className="block text-sm font-medium text-gray-700">
                 Account Type
@@ -96,6 +113,7 @@ const SetPassword = () => {
               </select>
             </div>
 
+            {/* Full Name */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                 Full Name
@@ -112,6 +130,7 @@ const SetPassword = () => {
               />
             </div>
 
+            {/* Bio */}
             <div>
               <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
                 Bio {formData.userType === 'collector' ? '(Optional)' : ''}
@@ -131,6 +150,7 @@ const SetPassword = () => {
               />
             </div>
 
+            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
@@ -156,6 +176,7 @@ const SetPassword = () => {
               </div>
             </div>
 
+            {/* Confirm Password */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
                 Confirm Password
