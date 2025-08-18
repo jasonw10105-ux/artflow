@@ -8,19 +8,20 @@ const Register = () => {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (submitted) return // prevent multiple submissions
     setLoading(true)
 
     try {
+      // Attempt to sign up
       await signUp(email)
-      toast.success('Check your email for the magic link!')
-      setSubmitted(true)       // mark as submitted
+      toast.success(`Magic link sent! Check your email to set up your account.`)
+      setEmail('')
     } catch (error) {
-      console.error('Registration error:', error.message)
+      console.error('Registration error:', error)
+
+      // Email already exists → redirect to login
       if (error.message.includes('already exists')) {
         toast.error('Email already registered. Redirecting to login...')
         setTimeout(() => navigate('/login'), 2000)
@@ -30,11 +31,6 @@ const Register = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleEmailChange = (e) => {
-    setEmail(e.target.value)
-    if (submitted) setSubmitted(false) // allow re-submission if email changes
   }
 
   return (
@@ -55,27 +51,24 @@ const Register = () => {
               type="email"
               required
               value={email}
-              onChange={handleEmailChange}
+              onChange={(e) => setEmail(e.target.value)}
               className="input mt-1"
               placeholder="you@example.com"
-              disabled={submitted} // disable input after submission
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading || submitted} // disable submit after sending link
+            disabled={loading}
             className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Submitting...' : submitted ? 'Magic Link Sent' : 'Register'}
+            {loading ? 'Submitting...' : 'Register'}
           </button>
         </form>
 
-        {submitted && (
-          <p className="mt-4 text-sm text-green-600 text-center">
-            We’ve sent a magic link to <strong>{email}</strong>. Check your inbox to continue.
-          </p>
-        )}
+        <p className="mt-4 text-sm text-gray-600 text-center">
+          After registering, you will receive a magic link via email to set up your password.
+        </p>
       </div>
     </div>
   )
