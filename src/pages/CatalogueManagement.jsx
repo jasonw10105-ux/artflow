@@ -23,22 +23,17 @@ const CatalogueManagement = () => {
   const [artworks, setArtworks] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [showSendModal, setShowSendModal] = useState(false)
   const [editingCatalogue, setEditingCatalogue] = useState(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     is_public: true,
     password: '',
-    artwork_ids: []
+    artwork_ids: [],
+    schedule_send_enabled: false,
+    scheduled_send: ''
   })
   const [generatingPDF, setGeneratingPDF] = useState(false)
-
-  // Schedule send states
-  const [scheduleSendEnabled, setScheduleSendEnabled] = useState(false)
-  const [scheduledSend, setScheduledSend] = useState(null)
-  const [selectedContacts, setSelectedContacts] = useState([])
-  const [sendChannel, setSendChannel] = useState('email') // 'email' | 'whatsapp'
 
   useEffect(() => {
     if (profile) {
@@ -102,6 +97,32 @@ const CatalogueManagement = () => {
     }))
   }
 
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      description: '',
+      is_public: true,
+      password: '',
+      artwork_ids: [],
+      schedule_send_enabled: false,
+      scheduled_send: ''
+    })
+  }
+
+  const handleEdit = (catalogue) => {
+    setEditingCatalogue(catalogue)
+    setFormData({
+      title: catalogue.title || '',
+      description: catalogue.description || '',
+      is_public: catalogue.is_public,
+      password: catalogue.password || '',
+      artwork_ids: catalogue.catalogue_artworks?.map(ca => ca.artworks.id) || [],
+      schedule_send_enabled: !!catalogue.scheduled_send,
+      scheduled_send: catalogue.scheduled_send || ''
+    })
+    setShowModal(true)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -116,7 +137,8 @@ const CatalogueManagement = () => {
         description: formData.description,
         is_public: formData.is_public,
         password: formData.is_public ? null : formData.password,
-        artist_id: profile.id
+        artist_id: profile.id,
+        scheduled_send: formData.schedule_send_enabled ? formData.scheduled_send : null
       }
 
       let catalogueId
@@ -130,7 +152,6 @@ const CatalogueManagement = () => {
         if (error) throw error
         catalogueId = editingCatalogue.id
 
-        // Delete existing artwork associations
         await supabase
           .from('catalogue_artworks')
           .delete()
@@ -146,7 +167,6 @@ const CatalogueManagement = () => {
         catalogueId = data.id
       }
 
-      // Add artwork associations
       const artworkAssociations = formData.artwork_ids.map(artworkId => ({
         catalogue_id: catalogueId,
         artwork_id: artworkId
@@ -169,32 +189,6 @@ const CatalogueManagement = () => {
     }
   }
 
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      is_public: true,
-      password: '',
-      artwork_ids: []
-    })
-    setScheduleSendEnabled(false)
-    setScheduledSend(null)
-    setSelectedContacts([])
-    setSendChannel('email')
-  }
-
-  const handleEdit = (catalogue) => {
-    setEditingCatalogue(catalogue)
-    setFormData({
-      title: catalogue.title || '',
-      description: catalogue.description || '',
-      is_public: catalogue.is_public,
-      password: catalogue.password || '',
-      artwork_ids: catalogue.catalogue_artworks?.map(ca => ca.artworks.id) || []
-    })
-    setShowModal(true)
-  }
-
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this catalogue?')) return
 
@@ -213,318 +207,170 @@ const CatalogueManagement = () => {
     }
   }
 
-  const generatePDF = async (catalogue) => {
-    setGeneratingPDF(true)
-    try {
-      const pdf = new jsPDF()
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
+  const copyShareLink = (catalogue) => {
+    const baseUrl = window.location.origin
+    const shareUrl = catalogue.is_public 
+      ? `${baseUrl}/catalogue/${catalogue.id}` 
+      : `${baseUrl}/private-catalogue/${catalogue.id}`
 
-      // Title page
-      pdf.setFontSize(24)
-      pdf.text(catalogue.title, pageWidth / 2, 40, { align: 'center' })
-      pdf.setFontSize(14)
-      pdf.text(`By ${profile.name}`, pageWidth / 2, 60, { align: 'center' })
-
-      if (catalogue.description) {
-        pdf.setFontSize(12)
-        const descriptionLines = pdf.splitTextToSize(catalogue.description, pageWidth - 40)
-        pdf.text(descriptionLines, 20, 100)
-      }
-
-      // Add artworks
-      const artworksInCatalogue = catalogue.catalogue_artworks?.map(ca => ca.artworks) || []
-
-      for (let i = 0; i < artworksInCatalogue.length; i++) {
-        const artwork = artworksInCatalogue[i]
-
-        if (i > 0) pdf.addPage()
-
-        try {
-          const img = new Image()
-          img.crossOrigin = 'anonymous'
-          await new Promise((resolve, reject) => {
-            img.onload = resolve
-            img.onerror = reject
-            img.src = artwork.image_url
-          })
-
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-
-          const maxWidth = pageWidth - 40
-          const maxHeight = pageHeight - 120
-
-          let { width, height } = img
-          const ratio = Math.min(maxWidth / width, maxHeight / height)
-          width *= ratio
-          height *= ratio
-
-          canvas.width = width
-          canvas.height = height
-          ctx.drawImage(img, 0, 0, width, height)
-
-          const imgData = canvas.toDataURL('image/jpeg', 0.8)
-          pdf.addImage(imgData, 'JPEG', (pageWidth - width) / 2, 20, width, height)
-
-          const detailsY = 20 + height + 20
-          pdf.setFontSize(16)
-          pdf.text(artwork.title, 20, detailsY)
-
-          pdf.setFontSize(12)
-          let currentY = detailsY + 15
-          if (artwork.medium) { pdf.text(`Medium: ${artwork.medium}`, 20, currentY); currentY += 15 }
-          if (artwork.dimensions) { pdf.text(`Dimensions: ${artwork.dimensions}`, 20, currentY); currentY += 15 }
-          if (artwork.year) { pdf.text(`Year: ${artwork.year}`, 20, currentY); currentY += 15 }
-          if (artwork.description) {
-            const descLines = pdf.splitTextToSize(artwork.description, pageWidth - 40)
-            pdf.text(descLines, 20, currentY)
-          }
-        } catch (imgError) {
-          console.error('Error loading image:', imgError)
-        }
-      }
-
-      pdf.save(`${catalogue.title}.pdf`)
-    } catch (error) {
-      console.error('Error generating PDF:', error)
-      toast.error('Failed to generate PDF')
-    } finally {
-      setGeneratingPDF(false)
-    }
+    navigator.clipboard.writeText(shareUrl)
+    toast.success('Share link copied to clipboard')
   }
 
-  const generateCatalogueURL = (catalogueId) => {
-    return `${window.location.origin}/catalogue/${catalogueId}`
+  const openAddModal = () => {
+    setEditingCatalogue(null)
+    resetForm()
+    setShowModal(true)
   }
 
-  const sendCatalogue = async (catalogueId) => {
-    if (!selectedContacts.length) {
-      toast.error('Select at least one contact')
-      return
-    }
-
-    try {
-      // Save scheduled_send if enabled
-      await supabase
-        .from('catalogues')
-        .update({ scheduled_send: scheduleSendEnabled ? scheduledSend : null })
-        .eq('id', catalogueId)
-
-      const now = new Date()
-      if (!scheduleSendEnabled || new Date(scheduledSend) <= now) {
-        // Send immediately
-        const { data: contacts, error } = await supabase
-          .from('contacts')
-          .select('*')
-          .in('id', selectedContacts)
-        if (error) throw error
-
-        const url = generateCatalogueURL(catalogueId)
-
-        if (sendChannel === 'whatsapp') {
-          contacts.forEach(contact => {
-            const message = encodeURIComponent(`Hi ${contact.name || ''}, check out my catalogue: ${url}`)
-            window.open(`https://wa.me/?text=${message}`, '_blank')
-          })
-        } else if (sendChannel === 'email') {
-          const to = contacts.map(c => c.email).join(',')
-          const subject = encodeURIComponent('My New Catalogue')
-          const body = encodeURIComponent(`Hi,\n\nCheck out my catalogue: ${url}`)
-          window.location.href = `mailto:${to}?subject=${subject}&body=${body}`
-        }
-
-        toast.success('Catalogue sent!')
-      } else {
-        toast.success('Catalogue scheduled to send!')
-      }
-
-      setShowSendModal(false)
-      resetForm()
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to send catalogue')
-    }
+  if (loading) {
+    return <div className="p-6">Loading...</div>
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Your Catalogues</h2>
+        <h1 className="text-3xl font-bold text-gray-900">Catalogue Management</h1>
         <button
-          onClick={() => { resetForm(); setShowModal(true) }}
-          className="bg-primary-600 text-white px-4 py-2 rounded flex items-center space-x-2"
+          onClick={openAddModal}
+          className="btn-primary flex items-center space-x-2"
         >
-          <Plus size={16}/> <span>Create Catalogue</span>
+          <Plus className="h-5 w-5" />
+          <span>Create Catalogue</span>
         </button>
       </div>
 
-      {loading ? (
-        <p>Loading...</p>
+      {catalogues.length === 0 ? (
+        <div className="text-center py-12">
+          <FolderOpen className="h-24 w-24 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No catalogues yet</h3>
+          <p className="text-gray-500 mb-6">Create your first catalogue to showcase collections of your work</p>
+          <button
+            onClick={openAddModal}
+            className="btn-primary"
+          >
+            Create Your First Catalogue
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {catalogues.map(catalogue => (
-            <div key={catalogue.id} className="border rounded p-4 shadow-sm flex flex-col justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">{catalogue.title}</h3>
-                <p className="text-sm text-gray-500">{new Date(catalogue.created_at).toLocaleDateString()}</p>
-                <p className="mt-2 text-sm">{catalogue.description}</p>
+          {catalogues.map((catalogue) => (
+            <div key={catalogue.id} className="card p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 mb-1">{catalogue.title}</h3>
+                  {catalogue.scheduled_send && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      Scheduled for: {new Date(catalogue.scheduled_send).toLocaleString()}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-600 mb-2">{catalogue.description}</p>
+                </div>
               </div>
-              <div className="flex space-x-2 mt-4">
-                <button onClick={() => handleEdit(catalogue)} className="p-2 border rounded"><Edit size={16}/></button>
-                <button onClick={() => handleDelete(catalogue.id)} className="p-2 border rounded"><Trash2 size={16}/></button>
-                <button onClick={() => generatePDF(catalogue)} className="p-2 border rounded"><Download size={16}/></button>
-                <button onClick={() => { setEditingCatalogue(catalogue); setShowSendModal(true) }} className="p-2 border rounded"><Share2 size={16}/></button>
+
+              <div className="flex justify-between items-center">
+                <div className="flex space-x-2">
+                  <button onClick={() => handleEdit(catalogue)} title="Edit">
+                    <Edit className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                  <button onClick={() => handleDelete(catalogue.id)} title="Delete">
+                    <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-600" />
+                  </button>
+                  <button onClick={() => copyShareLink(catalogue)} title="Copy share link">
+                    <Share2 className="h-4 w-4 text-gray-400 hover:text-blue-600" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white p-6 rounded w-full max-w-lg relative">
-            <button onClick={() => setShowModal(false)} className="absolute top-2 right-2"><X size={20}/></button>
-            <h3 className="text-xl font-semibold mb-4">{editingCatalogue ? 'Edit Catalogue' : 'Create Catalogue'}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-semibold">
+                {editingCatalogue ? 'Edit Catalogue' : 'Create New Catalogue'}
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-1">Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                 <input
                   type="text"
                   name="title"
                   value={formData.title}
                   onChange={handleInputChange}
-                  className="w-full border rounded p-2"
+                  className="input w-full"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  className="w-full border rounded p-2"
+                  className="input w-full"
+                  rows="3"
+                  placeholder="Describe this catalogue..."
                 />
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 <input
                   type="checkbox"
-                  name="is_public"
-                  checked={formData.is_public}
+                  name="schedule_send_enabled"
+                  checked={formData.schedule_send_enabled}
                   onChange={handleInputChange}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                 />
-                <label>Public</label>
+                <label className="text-sm text-gray-700">Schedule send</label>
               </div>
 
-              {!formData.is_public && (
+              {formData.schedule_send_enabled && (
                 <div>
-                  <label>Password</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Send Date & Time</label>
                   <input
-                    type="text"
-                    name="password"
-                    value={formData.password}
+                    type="datetime-local"
+                    name="scheduled_send"
+                    value={formData.scheduled_send}
                     onChange={handleInputChange}
-                    className="w-full border rounded p-2"
-                    required
+                    className="input w-full"
                   />
                 </div>
               )}
 
-              <div>
-                <label>Artworks</label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border p-2 rounded">
-                  {artworks.map(artwork => (
-                    <label key={artwork.id} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.artwork_ids.includes(artwork.id)}
-                        onChange={() => handleArtworkSelection(artwork.id)}
-                      />
-                      <span className="text-sm">{artwork.title}</span>
-                    </label>
-                  ))}
-                </div>
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary flex items-center space-x-2"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{editingCatalogue ? 'Update' : 'Create'} Catalogue</span>
+                </button>
               </div>
-
-              <button type="submit" className="bg-primary-600 text-white px-4 py-2 rounded flex items-center space-x-2">
-                <Save size={16}/> <span>Save</span>
-              </button>
             </form>
           </div>
         </div>
       )}
-
-      {/* Send Modal */}
-      {showSendModal && editingCatalogue && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white p-6 rounded w-full max-w-md relative">
-            <button onClick={() => setShowSendModal(false)} className="absolute top-2 right-2"><X size={20}/></button>
-            <h3 className="text-xl font-semibold mb-4">Send Catalogue: {editingCatalogue.title}</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Select Contacts</label>
-                <select
-                  multiple
-                  value={selectedContacts}
-                  onChange={e => setSelectedContacts(Array.from(e.target.selectedOptions, o => o.value))}
-                  className="w-full border rounded p-2 h-32"
-                >
-                  {/* Replace with your contacts */}
-                  <option value="contact1">Contact 1</option>
-                  <option value="contact2">Contact 2</option>
-                  <option value="contact3">Contact 3</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Send Channel</label>
-                <select
-                  value={sendChannel}
-                  onChange={e => setSendChannel(e.target.value)}
-                  className="w-full border rounded p-2"
-                >
-                  <option value="email">Email</option>
-                  <option value="whatsapp">WhatsApp</option>
-                </select>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={scheduleSendEnabled}
-                  onChange={(e) => setScheduleSendEnabled(e.target.checked)}
-                />
-                <label>Schedule Send</label>
-              </div>
-
-              {scheduleSendEnabled && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Select Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={scheduledSend || ''}
-                    onChange={e => setScheduledSend(e.target.value)}
-                    className="w-full border rounded p-2"
-                  />
-                </div>
-              )}
-
-              <button
-                onClick={() => sendCatalogue(editingCatalogue.id)}
-                className="bg-primary-600 text-white px-4 py-2 rounded"
-              >
-                Send
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }
