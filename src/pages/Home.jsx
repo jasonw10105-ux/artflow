@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -16,14 +17,32 @@ const Home = () => {
       const { data, error } = await supabase
         .from('profiles')
         .select(`
-          *,
-          artworks(id, title, image_url)
+          id,
+          name,
+          bio,
+          artworks (
+            id,
+            title,
+            image_url
+          )
         `)
         .eq('user_type', 'artist')
         .limit(6)
 
       if (error) throw error
-      setFeaturedArtists(data || [])
+
+      // Convert storage paths to public URLs
+      const artistsWithPublicUrls = data.map(artist => {
+        const artworksWithUrls = artist.artworks.map(work => ({
+          ...work,
+          public_url: work.image_url
+            ? supabase.storage.from('works').getPublicUrl(work.image_url).publicUrl
+            : null
+        }))
+        return { ...artist, artworks: artworksWithUrls }
+      })
+
+      setFeaturedArtists(artistsWithPublicUrls)
     } catch (error) {
       console.error('Error fetching artists:', error)
     } finally {
@@ -58,30 +77,28 @@ const Home = () => {
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary-50 to-blue-100 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-              Showcase Your Art to the World
-            </h1>
-            <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Create stunning digital portfolios, manage your artwork, build professional catalogues, 
-              and connect with collectors all in one platform.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                to="/register"
-                className="btn-primary text-lg px-8 py-3 flex items-center justify-center"
-              >
-                Get Started Free
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-              <Link
-                to="/login"
-                className="btn-secondary text-lg px-8 py-3"
-              >
-                Sign In
-              </Link>
-            </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
+            Showcase Your Art to the World
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+            Create stunning digital portfolios, manage your artwork, build professional catalogues, 
+            and connect with collectors all in one platform.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              to="/register"
+              className="btn-primary text-lg px-8 py-3 flex items-center justify-center"
+            >
+              Get Started Free
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+            <Link
+              to="/login"
+              className="btn-secondary text-lg px-8 py-3"
+            >
+              Sign In
+            </Link>
           </div>
         </div>
       </section>
@@ -109,9 +126,7 @@ const Home = () => {
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">
                     {feature.title}
                   </h3>
-                  <p className="text-gray-600">
-                    {feature.description}
-                  </p>
+                  <p className="text-gray-600">{feature.description}</p>
                 </div>
               )
             })}
@@ -147,11 +162,11 @@ const Home = () => {
                 <Link
                   key={artist.id}
                   to={`/artist/${artist.id}`}
-                  className="card p-6 hover:shadow-lg transition-shadow"
+                  className="card p-6 hover:shadow-lg transition-shadow rounded-lg bg-white"
                 >
-                  {artist.artworks?.[0] ? (
+                  {artist.artworks?.[0]?.public_url ? (
                     <img
-                      src={artist.artworks[0].image_url}
+                      src={artist.artworks[0].public_url}
                       alt={artist.artworks[0].title}
                       className="w-full h-48 object-cover rounded-lg mb-4"
                     />
