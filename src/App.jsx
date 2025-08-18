@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
@@ -24,23 +25,13 @@ function App() {
   return (
     <AuthProvider>
       <Toaster position="top-right" />
-
       <Routes>
         {/* Public Layout */}
         <Route element={<Layout />}>
           <Route index element={<Home />} />
-
-          <Route path="login" element={
-            <PublicRoute><Login /></PublicRoute>
-          } />
-
-          <Route path="register" element={
-            <PublicRoute><Register /></PublicRoute>
-          } />
-
-          {/* Magic link redirect: user may not have password yet */}
+          <Route path="login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
           <Route path="set-password" element={<SetPassword />} />
-
           <Route path="artist/:artistId" element={<ArtistProfile />} />
           <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
           <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
