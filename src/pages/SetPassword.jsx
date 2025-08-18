@@ -199,3 +199,18 @@ const SetPassword = () => {
               </button>
             </div>
           </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Creating...' : 'Create Account'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export default SetPassword
