@@ -7,7 +7,6 @@ import {
   FolderOpen, 
   Eye, 
   MessageSquare, 
-  DollarSign,
   TrendingUp,
   Plus,
   BarChart3
@@ -29,18 +28,13 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (profile) {
-      fetchDashboardData()
-    }
+    if (profile) fetchDashboardData()
   }, [profile])
 
   const fetchDashboardData = async () => {
+    setLoading(true)
     try {
-      await Promise.all([
-        fetchStats(),
-        fetchRecentActivity(),
-        fetchViewsData()
-      ])
+      await Promise.all([fetchStats(), fetchRecentActivity(), fetchViewsData()])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
@@ -50,36 +44,28 @@ const Dashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const { count: artworksCount } = await supabase
-        .from('artworks')
-        .select('*', { count: 'exact', head: true })
-        .eq('artist_id', profile.id)
+      const [
+        { count: artworksCount },
+        { count: cataloguesCount },
+        { data: inquiriesData },
+        { data: salesData }
+      ] = await Promise.all([
+        supabase.from('works').select('*', { count: 'exact', head: true }).eq('artist_id', profile.id),
+        supabase.from('catalogues').select('*', { count: 'exact', head: true }).eq('artist_id', profile.id),
+        supabase.from('inquiries').select('*').eq('artist_id', profile.id),
+        supabase.from('sales').select('price').eq('artist_id', profile.id)
+      ])
 
-      const { count: cataloguesCount } = await supabase
-        .from('catalogues')
-        .select('*', { count: 'exact', head: true })
-        .eq('artist_id', profile.id)
-
-      const { count: inquiriesCount } = await supabase
-        .from('inquiries')
-        .select('*', { count: 'exact', head: true })
-        .eq('artist_id', profile.id)
-
-      const { data: salesData } = await supabase
-        .from('sales')
-        .select('amount, currency')
-        .eq('artist_id', profile.id)
-
-      const totalSales = salesData?.length || 0
-      const totalRevenue = salesData?.reduce((sum, sale) => sum + (sale.amount || 0), 0) || 0
-      const totalViews = Math.floor(Math.random() * 1000) + 100
+      const totalRevenue = salesData?.reduce((sum, sale) => sum + parseFloat(sale.price || 0), 0) || 0
+      const totalViewsData = await supabase.from('works').select('views').eq('artist_id', profile.id)
+      const totalViews = totalViewsData.data?.reduce((sum, work) => sum + (work.views || 0), 0) || 0
 
       setStats({
         totalArtworks: artworksCount || 0,
         totalCatalogues: cataloguesCount || 0,
         totalViews,
-        totalInquiries: inquiriesCount || 0,
-        totalSales,
+        totalInquiries: inquiriesData?.length || 0,
+        totalSales: salesData?.length || 0,
         totalRevenue
       })
     } catch (error) {
@@ -93,8 +79,7 @@ const Dashboard = () => {
         .from('inquiries')
         .select(`
           *,
-          artworks(title),
-          profiles(name)
+          works(title)
         `)
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
@@ -102,9 +87,8 @@ const Dashboard = () => {
 
       const activity = inquiries?.map(inquiry => ({
         id: inquiry.id,
-        type: 'inquiry',
-        message: `New inquiry from ${inquiry.profiles?.name || 'Unknown'} about "${inquiry.artworks?.title}"`,
-        time: new Date(inquiry.created_at).toLocaleDateString()
+        message: `New inquiry from ${inquiry.sender_email} about "${inquiry.works?.title}"`,
+        time: new Date(inquiry.created_at).toLocaleString()
       })) || []
 
       setRecentActivity(activity)
@@ -114,16 +98,33 @@ const Dashboard = () => {
   }
 
   const fetchViewsData = async () => {
-    const mockData = [
-      { name: 'Mon', views: 24 },
-      { name: 'Tue', views: 13 },
-      { name: 'Wed', views: 78 },
-      { name: 'Thu', views: 39 },
-      { name: 'Fri', views: 48 },
-      { name: 'Sat', views: 62 },
-      { name: 'Sun', views: 55 }
-    ]
-    setViewsData(mockData)
+    try {
+      const { data: works } = await supabase
+        .from('works')
+        .select('created_at, views')
+        .eq('artist_id', profile.id)
+
+      if (works) {
+        const dayMap = {}
+        const today = new Date()
+        for (let i = 6; i >= 0; i--) {
+          const day = new Date(today)
+          day.setDate(today.getDate() - i)
+          const key = day.toLocaleDateString('en-US', { weekday: 'short' })
+          dayMap[key] = 0
+        }
+
+        works.forEach(work => {
+          const dayKey = new Date(work.created_at).toLocaleDateString('en-US', { weekday: 'short' })
+          if (dayMap[dayKey] !== undefined) dayMap[dayKey] += work.views || 0
+        })
+
+        const chartData = Object.entries(dayMap).map(([name, views]) => ({ name, views }))
+        setViewsData(chartData)
+      }
+    } catch (error) {
+      console.error('Error fetching views data:', error)
+    }
   }
 
   if (loading) {
@@ -152,22 +153,22 @@ const Dashboard = () => {
   ]
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-8">
+    <div className="p-6 max-w-7xl mx-auto space-y-8">
+      <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Welcome back, {profile?.name}!
         </h1>
         <p className="text-gray-600">
-          Here's what's happening with your portfolio
+          Here's an overview of your portfolio.
         </p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statCards.map((stat, index) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {statCards.map((stat, i) => {
           const Icon = stat.icon
           return (
-            <div key={index} className="card p-6">
+            <div key={i} className="card p-6 shadow-sm rounded-lg border border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
@@ -182,13 +183,12 @@ const Dashboard = () => {
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+      {/* Charts & Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Views Chart */}
-        <div className="card p-6">
+        <div className="card p-6 shadow-sm rounded-lg border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Profile Views This Week
-            </h3>
+            <h3 className="text-lg font-semibold text-gray-900">Profile Views (Last 7 Days)</h3>
             <BarChart3 className="h-5 w-5 text-gray-400" />
           </div>
           <ResponsiveContainer width="100%" height={200}>
@@ -203,18 +203,18 @@ const Dashboard = () => {
         </div>
 
         {/* Recent Activity */}
-        <div className="card p-6">
+        <div className="card p-6 shadow-sm rounded-lg border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
           {recentActivity.length > 0 ? (
             <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3">
-                  <div className="bg-primary-100 rounded-full p-1">
-                    <MessageSquare className="h-4 w-4 text-primary-600" />
+              {recentActivity.map(act => (
+                <div key={act.id} className="flex items-start space-x-3">
+                  <div className="bg-orange-100 rounded-full p-1">
+                    <MessageSquare className="h-4 w-4 text-orange-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{activity.message}</p>
-                    <p className="text-xs text-gray-500">{activity.time}</p>
+                    <p className="text-sm text-gray-900">{act.message}</p>
+                    <p className="text-xs text-gray-500">{act.time}</p>
                   </div>
                 </div>
               ))}
@@ -226,13 +226,10 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="card p-6">
+      <div className="card p-6 shadow-sm rounded-lg border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Link
-            to="/dashboard/artworks"
-            className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
+          <Link to="/dashboard/artworks" className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <div className="bg-blue-100 p-2 rounded-lg">
               <Plus className="h-5 w-5 text-blue-600" />
             </div>
@@ -242,10 +239,7 @@ const Dashboard = () => {
             </div>
           </Link>
 
-          <Link
-            to="/dashboard/catalogues"
-            className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
+          <Link to="/dashboard/catalogues" className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <div className="bg-green-100 p-2 rounded-lg">
               <FolderOpen className="h-5 w-5 text-green-600" />
             </div>
@@ -255,10 +249,7 @@ const Dashboard = () => {
             </div>
           </Link>
 
-          <Link
-            to="/dashboard/settings"
-            className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
+          <Link to="/dashboard/analytics" className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <div className="bg-purple-100 p-2 rounded-lg">
               <TrendingUp className="h-5 w-5 text-purple-600" />
             </div>
@@ -268,11 +259,7 @@ const Dashboard = () => {
             </div>
           </Link>
 
-          {/* New Public Profile Button */}
-          <Link
-            to={`/artist/${profile.id}`}
-            className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
+          <Link to={`/artist/${profile.id}`} className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <div className="bg-orange-100 p-2 rounded-lg">
               <Eye className="h-5 w-5 text-orange-600" />
             </div>
