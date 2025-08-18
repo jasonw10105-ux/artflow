@@ -3,7 +3,6 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext({})
-
 export const useAuth = () => useContext(AuthContext)
 
 export const AuthProvider = ({ children }) => {
@@ -11,7 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Initial session load + listener
+  // Initialize session and auth listener
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -28,7 +27,7 @@ export const AuthProvider = ({ children }) => {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  // Fetch profile whenever user changes
+  // Fetch profile when user changes
   useEffect(() => {
     if (!user) {
       setProfile(null)
@@ -42,7 +41,10 @@ export const AuthProvider = ({ children }) => {
         .eq('id', user.id)
         .single()
 
-      if (error) console.error('Error fetching profile:', error)
+      if (error) {
+        console.error('Error fetching profile:', error)
+        return
+      }
 
       setProfile(data)
     }
@@ -50,23 +52,21 @@ export const AuthProvider = ({ children }) => {
     fetchProfile()
   }, [user])
 
-  // -----------------------------
-  // OTP Authentication
-  // -----------------------------
-  const sendOtp = async (email) => supabase.auth.signInWithOtp({ email })
+  // === OTP signup for email verification ===
+  const signUp = async (email) => {
+    return await supabase.auth.signInWithOtp({ email })
+  }
 
-  const verifyOtp = async (email, token) => {
-    // Supabase auto-verifies via email link
-    const { data: { session }, error } = await supabase.auth.getSession()
+  // Login with email/password
+  const signIn = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    setUser(session?.user ?? null)
-    return session?.user
+    setUser(data.user)
+    return data.user
   }
 
   // Complete signup: set password + update profile
   const completeSignUp = async (password, userType, bio, name) => {
-    if (!user) throw new Error('No user session found')
-
     const { data, error } = await supabase.auth.updateUser({ password })
     if (error) throw error
 
@@ -86,13 +86,6 @@ export const AuthProvider = ({ children }) => {
     return data.user
   }
 
-  const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    setUser(data.user)
-    return data.user
-  }
-
   const signOut = async () => {
     await supabase.auth.signOut()
     setUser(null)
@@ -105,8 +98,7 @@ export const AuthProvider = ({ children }) => {
         user,
         profile,
         loading,
-        sendOtp,
-        verifyOtp,
+        signUp,
         signIn,
         completeSignUp,
         signOut,
