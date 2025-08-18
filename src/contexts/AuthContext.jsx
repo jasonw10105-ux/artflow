@@ -5,9 +5,7 @@ const AuthContext = createContext(null)
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
   return context
 }
 
@@ -19,25 +17,19 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // First check if we are coming from a magic link URL
-        const { data: magicData, error: magicError } = await supabase.auth.getSessionFromUrl({ storeSession: true })
-        if (magicError) console.warn('Magic link session error:', magicError.message)
-
-        // If no magic link session, check current session
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) throw error
 
-        const currentUser = session?.user ?? magicData?.session?.user ?? null
-        setUser(currentUser)
-
-        if (currentUser) {
-          await fetchProfile(currentUser.id)
-          subscribeToProfile(currentUser.id)
+        if (session?.user) {
+          setUser(session.user)
+          await fetchProfile(session.user.id)
+          subscribeToProfile(session.user.id)
         } else {
+          setUser(null)
           setProfile(null)
         }
       } catch (err) {
-        console.error('Error initializing auth:', err.message)
+        console.error('Error getting session:', err.message)
       } finally {
         setLoading(false)
       }
@@ -45,7 +37,6 @@ export const AuthProvider = ({ children }) => {
 
     initAuth()
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!session?.user) {
@@ -73,12 +64,7 @@ export const AuthProvider = ({ children }) => {
       .channel('profiles-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${userId}`,
-        },
+        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         async (payload) => {
           if (payload.eventType === 'DELETE') {
             await signOut()
@@ -104,8 +90,8 @@ export const AuthProvider = ({ children }) => {
       }
 
       setProfile(data)
-    } catch (error) {
-      console.error('Error fetching profile:', error.message)
+    } catch (err) {
+      console.error('Error fetching profile:', err.message)
       await signOut()
     }
   }
@@ -120,18 +106,19 @@ export const AuthProvider = ({ children }) => {
   }
 
   const completeSignUp = async (password, userType, bio) => {
-    if (!user) throw new Error('No user session found')
+    const sessionUser = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : user
+    if (!sessionUser) throw new Error('No active session found')
 
     // Update password
     const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
     if (authError) throw authError
 
-    // Update profile
+    // Upsert profile
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .upsert({
-        id: user.id,
-        email: user.email,
+        id: sessionUser.id,
+        email: sessionUser.email,
         user_type: userType,
         bio
       })
@@ -140,6 +127,7 @@ export const AuthProvider = ({ children }) => {
     if (profileError) throw profileError
 
     setProfile(profileData)
+    setUser(sessionUser)
     return profileData
   }
 
@@ -166,26 +154,24 @@ export const AuthProvider = ({ children }) => {
       .eq('id', user.id)
       .select()
       .single()
-
     if (error) throw error
+
     setProfile(data)
     return data
   }
 
-  const value = {
-    user,
-    profile,
-    loading,
-    signUp,
-    completeSignUp,
-    signIn,
-    signOut,
-    updateProfile,
-    fetchProfile
-  }
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      loading,
+      signUp,
+      completeSignUp,
+      signIn,
+      signOut,
+      updateProfile,
+      fetchProfile
+    }}>
       {children}
     </AuthContext.Provider>
   )
