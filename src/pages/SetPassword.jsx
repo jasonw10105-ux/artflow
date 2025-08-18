@@ -1,8 +1,10 @@
+// src/pages/SetPassword.jsx
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
 
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
@@ -18,32 +20,36 @@ const SetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
-  const [magicToken, setMagicToken] = useState(null)
-  const [linkError, setLinkError] = useState('')
 
-  // Extract token and error from URL
+  // Handle magic link login and set user email
   useEffect(() => {
-    const hash = window.location.hash
-    if (hash.includes('access_token')) {
-      const params = new URLSearchParams(hash.replace('#', ''))
-      setMagicToken(params.get('access_token'))
-    } else if (hash.includes('error')) {
-      const params = new URLSearchParams(hash.replace('#', ''))
-      setLinkError(params.get('error_description') || 'Invalid or expired link')
-    }
-  }, [])
-
-  // Redirect or set email once auth state is ready
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user && !magicToken && !linkError) {
-        toast.error('No active session found. Please request a new link.')
+    const handleMagicLink = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
+        if (error) {
+          toast.error('Invalid or expired link. Please request a new one.')
+          navigate('/register')
+          return
+        }
+        if (session?.user) {
+          setEmail(session.user.email)
+        } else if (!user) {
+          toast.error('No active session found. Please request a new link.')
+          navigate('/register')
+        } else {
+          setEmail(user.email)
+        }
+      } catch (err) {
+        console.error('Magic link handling error:', err)
+        toast.error('Failed to process magic link.')
         navigate('/register')
-      } else if (user) {
-        setEmail(user.email)
       }
     }
-  }, [authLoading, user, magicToken, linkError, navigate])
+
+    if (!authLoading && !email) {
+      handleMagicLink()
+    }
+  }, [authLoading, user, email, navigate])
 
   const handleChange = (e) => {
     setFormData({
@@ -67,34 +73,18 @@ const SetPassword = () => {
 
     setLoading(true)
     try {
-      await completeSignUp(formData.password, formData.userType, formData.bio, magicToken)
+      await completeSignUp(formData.password, formData.userType, formData.bio)
       toast.success('Account setup complete!')
       navigate('/dashboard')
     } catch (error) {
       console.error(error)
-      toast.error(error.message || 'Failed to complete setup')
+      toast.error(error.message || 'Failed to complete account setup')
     } finally {
       setLoading(false)
     }
   }
 
-  // Show error message if magic link is invalid or expired
-  if (linkError) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Link Error</h2>
-        <p className="text-gray-700 mb-6 text-center">{linkError}</p>
-        <button
-          onClick={() => navigate('/register')}
-          className="btn-primary"
-        >
-          Request a New Link
-        </button>
-      </div>
-    )
-  }
-
-  if (authLoading || (!user && !magicToken)) {
+  if (authLoading || !email) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -110,7 +100,6 @@ const SetPassword = () => {
         </h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {/* Account Type */}
           <div className="space-y-4">
             <div>
               <label htmlFor="userType" className="block text-sm font-medium text-gray-700">
@@ -128,7 +117,6 @@ const SetPassword = () => {
               </select>
             </div>
 
-            {/* Full Name */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                 Full Name
@@ -145,7 +133,6 @@ const SetPassword = () => {
               />
             </div>
 
-            {/* Bio */}
             <div>
               <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
                 Bio {formData.userType === 'collector' ? '(Optional)' : ''}
@@ -165,7 +152,6 @@ const SetPassword = () => {
               />
             </div>
 
-            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
@@ -191,7 +177,6 @@ const SetPassword = () => {
               </div>
             </div>
 
-            {/* Confirm Password */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
                 Confirm Password
