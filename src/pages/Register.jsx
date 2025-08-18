@@ -1,12 +1,9 @@
-// src/pages/Register.jsx
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 const Register = () => {
-  const { signUp } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,29 +13,15 @@ const Register = () => {
     setLoading(true)
 
     try {
-      // Check if email exists in Supabase Auth
-      const { data: existingUser, error: fetchError } = await supabase.auth.getUserByEmail(email)
-      if (fetchError) throw fetchError
+      // Sign up user (magic link / password flow)
+      const { error } = await supabase.auth.signUp({
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/set-password` }
+      })
 
-      if (existingUser?.user) {
-        // Check if user has a password
-        const hasPassword = existingUser.user.password_hash ? true : false
-        if (hasPassword) {
-          toast.success('User already exists. Redirecting to login...')
-          setTimeout(() => navigate('/login'), 1500)
-          return
-        } else {
-          // User exists but no password → send magic link
-          await signUp(email)
-          toast.success('Check your email to verify. Then set your password.')
-          navigate('/set-password')
-          return
-        }
-      }
+      if (error) throw error
 
-      // New user → create magic link
-      await signUp(email)
-      toast.success('Check your email for the magic link to set your password.')
+      toast.success('Check your email to verify and set your password.')
       navigate('/set-password')
     } catch (error) {
       console.error('Registration error:', error)
