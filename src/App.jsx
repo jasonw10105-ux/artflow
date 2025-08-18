@@ -69,7 +69,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="artworks" element={<ArtworkManagement />} />
           <Route path="catalogues" element={<CatalogueManagement />} />
-          <Route path="/contacts" element={<ContactsManagement />} />
+          <Route path="contacts" element={<ContactsManagement />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
