@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import toast from 'react-hot-toast'
 
 const AuthContext = createContext()
 
@@ -10,13 +9,13 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const getSession = async () => {
+    const init = async () => {
       const { data } = await supabase.auth.getSession()
       setUser(data.session?.user || null)
       if (data.session?.user) fetchProfile(data.session.user.id)
       setLoading(false)
     }
-    getSession()
+    init()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
@@ -27,19 +26,13 @@ export const AuthProvider = ({ children }) => {
 
   const fetchProfile = async (userId) => {
     if (!userId) return setProfile(null)
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (error) console.error(error)
-    else setProfile(data)
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (!error) setProfile(data)
   }
 
   const registerWithEmail = async (email) => {
-    const { error } = await supabase.auth.signInWithOtp({ email })
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
     if (error) throw error
-    toast.success('Check your email for verification link!')
   }
 
   const completeSignUp = async (password, userType, bio, name) => {
@@ -57,14 +50,14 @@ export const AuthProvider = ({ children }) => {
   }
 
   const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      if (error.status === 400) {
-        await supabase.auth.signInWithOtp({ email })
-        throw new Error('No password set. Check your email to complete registration.')
-      }
-      throw error
+    if (!password) {
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
+      if (error) throw error
+      throw new Error('No password set. Check your email to complete registration.')
     }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
     await fetchProfile(data.user.id)
   }
 
