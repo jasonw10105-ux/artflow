@@ -19,28 +19,24 @@ const SetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  // Redirect if auth is loaded but user has password already
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
-        toast.error('No active session found. Please request a new link.')
-        navigate('/register', { replace: true })
-      } else if (profile?.password_set) {
-        // Already has a password → send to login
-        navigate('/login', { replace: true })
-      } else {
-        // Pre-fill userType and name if profile exists
-        setFormData((prev) => ({
-          ...prev,
-          name: profile?.name || '',
-          userType: profile?.user_type || 'artist',
-          bio: profile?.bio || ''
-        }))
+        toast.error('No active session found. Please request a new magic link.')
+        navigate('/register')
+        return
+      }
+      // If profile exists and password_set = true, redirect to login
+      if (profile?.password_set) {
+        toast('Password already set. Please login.')
+        navigate('/login')
       }
     }
   }, [authLoading, user, profile, navigate])
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
   const handleSubmit = async (e) => {
@@ -58,9 +54,9 @@ const SetPassword = () => {
     try {
       await completeSignUp(formData.password, formData.userType, formData.bio)
       toast.success('Account setup complete!')
-      navigate('/dashboard', { replace: true })
+      navigate('/dashboard')
     } catch (err) {
-      console.error('Error completing sign up', err)
+      console.error(err)
       toast.error(err.message || 'Failed to complete setup')
     } finally {
       setLoading(false)
@@ -76,10 +72,10 @@ const SetPassword = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
         <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
-          Set your password
+          Set Your Password
         </h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
