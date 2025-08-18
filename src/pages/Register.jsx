@@ -13,6 +13,7 @@ const Register = () => {
     setLoading(true)
     try {
       await registerWithEmail(email)
+      toast.success('Check your email for the verification link!')
       setSent(true)
     } catch (err) {
       toast.error(err.message)
@@ -36,13 +37,11 @@ const Register = () => {
               required
             />
             <button disabled={loading} className="btn-primary w-full">
-              {loading ? 'Sending OTP...' : 'Register'}
+              {loading ? 'Sending...' : 'Register'}
             </button>
           </>
         ) : (
-          <p className="text-center text-green-600">
-            OTP sent! Check your email to continue.
-          </p>
+          <p className="text-center text-green-600">OTP sent! Check your email to continue.</p>
         )}
       </form>
     </div>
