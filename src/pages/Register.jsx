@@ -13,20 +13,18 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-
     try {
       const { error } = await sendOtp(email)
-
       if (error) {
         toast.error(error.message)
         return
       }
 
-      toast.success('Check your email for the OTP link to continue.')
-      navigate('/set-password')
+      toast.success('Check your email to verify your account via OTP link.')
+      navigate('/verify-otp')  // redirect to verify page
     } catch (err) {
-      console.error('Registration error:', err)
-      toast.error(err.message || 'Registration failed')
+      console.error(err)
+      toast.error(err.message || 'Failed to register')
     } finally {
       setLoading(false)
     }
@@ -36,7 +34,6 @@ const Register = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <h2 className="text-center text-3xl font-bold text-gray-900">Create an account</h2>
-
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
@@ -51,7 +48,6 @@ const Register = () => {
               placeholder="you@example.com"
             />
           </div>
-
           <button
             type="submit"
             disabled={loading}
