@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const AuthContext = createContext({})
+const AuthContext = createContext(null)
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
@@ -17,24 +17,35 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      }
-      setLoading(false)
-    })
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw error
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
         setUser(session?.user ?? null)
+
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        }
+      } catch (err) {
+        console.error('Error getting session:', err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    initAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setUser(session?.user ?? null)
+
         if (session?.user) {
           await fetchProfile(session.user.id)
         } else {
           setProfile(null)
         }
+
         setLoading(false)
       }
     )
@@ -53,129 +64,48 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error
       setProfile(data)
     } catch (error) {
-      console.error('Error fetching profile:', error)
+      console.error('Error fetching profile:', error.message)
+      setProfile(null)
     }
-  }
-
-  const signUp = async (email, password, userData) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
-
-    if (error) throw error
-
-    // Create profile
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: data.user.id,
-            email: data.user.email,
-            ...userData
-          }
-        ])
-
-      if (profileError) throw profileError
-    }
-
-    return data
-  }
-
-  const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) throw error
-    return data
-  }
-
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-  }
-
-  const updateProfile = async (updates) => {
-    if (!user) throw new Error('No user logged in')
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.id)
-      .select()
-      .single()
-
-    if (error) throw error
-    setProfile(data)
-    return data
-  }
-
-  // NEW: send verification email
-  const sendVerificationEmail = async (email) => {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/set-password` }
-    })
-
-    if (error) throw error
-    return data
-  }
-
-  // NEW: set password and create profile
-  const setPassword = async (email, password, userData) => {
-    // 1. Get user by email
-    const { data: userDataResponse, error: userError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('email', email)
-      .single()
-
-    if (userError && userError.code !== 'PGRST116') throw userError // ignore not found
-
-    // 2. Update password using supabase auth API
-    const { data: authData, error: authError } = await supabase.auth.updateUser({
-      password,
-    })
-
-    if (authError) throw authError
-
-    // 3. Insert or update profile
-    if (userDataResponse) {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .update(userData)
-        .eq('email', email)
-        .select()
-        .single()
-      if (profileError) throw profileError
-      setProfile(profileData)
-    } else {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .insert([{ email, ...userData }])
-        .select()
-        .single()
-      if (profileError) throw profileError
-      setProfile(profileData)
-    }
-
-    return authData
   }
 
   const value = {
     user,
     profile,
     loading,
-    signUp,
-    signIn,
-    signOut,
-    updateProfile,
-    fetchProfile,
-    sendVerificationEmail,
-    setPassword,
+    signUp: async (email, password, userData) => {
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      if (error) throw error
+
+      if (data.user) {
+        await supabase.from('profiles').insert([{ id: data.user.id, email: data.user.email, ...userData }])
+      }
+
+      return data
+    },
+    signIn: async (email, password) => {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+      return data
+    },
+    signOut: async () => {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    },
+    updateProfile: async (updates) => {
+      if (!user) throw new Error('No user logged in')
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      setProfile(data)
+      return data
+    }
   }
 
   return (
