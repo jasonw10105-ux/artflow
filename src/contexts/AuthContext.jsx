@@ -5,7 +5,9 @@ const AuthContext = createContext(null)
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth must be used within AuthProvider')
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
   return context
 }
 
@@ -17,13 +19,29 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Check for magic link in URL
+        const hash = window.location.hash
+        if (hash.includes('access_token')) {
+          const params = new URLSearchParams(hash.replace('#', ''))
+          const access_token = params.get('access_token')
+          if (access_token) {
+            const { data, error } = await supabase.auth.setSession({ access_token })
+            if (error) throw error
+            setUser(data.user)
+            await fetchProfile(data.user.id)
+            subscribeToProfile(data.user.id)
+            setLoading(false)
+            return
+          }
+        }
+
+        // Normal session
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) throw error
 
         setUser(session?.user ?? null)
-
         if (session?.user) {
-          await ensureProfile(session.user)
+          await fetchProfile(session.user.id)
           subscribeToProfile(session.user.id)
         } else {
           setProfile(null)
@@ -45,7 +63,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         setUser(session.user)
-        await ensureProfile(session.user)
+        await fetchProfile(session.user.id)
         subscribeToProfile(session.user.id)
         setLoading(false)
       }
@@ -64,7 +82,12 @@ export const AuthProvider = ({ children }) => {
       .channel('profiles-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${userId}`,
+        },
         async (payload) => {
           if (payload.eventType === 'DELETE') {
             await signOut()
@@ -76,32 +99,23 @@ export const AuthProvider = ({ children }) => {
       .subscribe()
   }
 
-  // Ensure a profile exists for the logged-in user
-  const ensureProfile = async (user) => {
+  const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single()
 
-      if (error && error.code === 'PGRST116') {
-        // Profile not found, create it
-        const { data: profileData, error: insertError } = await supabase
-          .from('profiles')
-          .insert([{ id: user.id, email: user.email }])
-          .select()
-          .single()
-        if (insertError) throw insertError
-        setProfile(profileData)
-      } else if (error) {
-        throw error
-      } else {
-        setProfile(data)
+      if (error || !data) {
+        await signOut()
+        return
       }
-    } catch (err) {
-      console.error('Error ensuring profile:', err.message)
-      setProfile(null)
+
+      setProfile(data)
+    } catch (error) {
+      console.error('Error fetching profile:', error.message)
+      await signOut()
     }
   }
 
@@ -114,19 +128,29 @@ export const AuthProvider = ({ children }) => {
     return data
   }
 
-  const completeSignUp = async (password, userType, bio) => {
-    if (!user) throw new Error('No user session found')
+  const completeSignUp = async (password, userType, bio, magicLinkToken) => {
+    let currentUser = user
+
+    // If no session, set it from magic link token
+    if (!currentUser && magicLinkToken) {
+      const { data, error } = await supabase.auth.setSession({ access_token: magicLinkToken })
+      if (error) throw error
+      currentUser = data.user
+      setUser(currentUser)
+    }
+
+    if (!currentUser) throw new Error('No user session found')
 
     // Update password
-    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
+    const { error: authError } = await supabase.auth.updateUser({ password })
     if (authError) throw authError
 
-    // Upsert profile with role and bio
+    // Update profile
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .upsert({
-        id: user.id,
-        email: user.email,
+        id: currentUser.id,
+        email: currentUser.email,
         user_type: userType,
         bio
       })
@@ -161,8 +185,8 @@ export const AuthProvider = ({ children }) => {
       .eq('id', user.id)
       .select()
       .single()
-    if (error) throw error
 
+    if (error) throw error
     setProfile(data)
     return data
   }
@@ -176,7 +200,7 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     updateProfile,
-    fetchProfile: () => ensureProfile(user)
+    fetchProfile
   }
 
   return (
