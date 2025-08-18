@@ -14,7 +14,7 @@ const Register = () => {
     setLoading(true)
 
     try {
-      await signUp(email) // Supabase sends magic link for verification
+      await signUp(email) // Supabase sends magic link automatically
       toast.success('Check your email to verify. Then set your password.')
       navigate('/set-password')
     } catch (error) {
@@ -32,9 +32,7 @@ const Register = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
             <input
               id="email"
               name="email"
