@@ -26,13 +26,14 @@ export const AuthProvider = ({ children }) => {
 
         if (session?.user) {
           await fetchProfile(session.user.id)
+          subscribeToProfile(session.user.id) // ✅ real-time listener
         } else {
           setProfile(null)
         }
       } catch (err) {
         console.error('Error getting session:', err.message)
       } finally {
-        setLoading(false) // ✅ always clears loading
+        setLoading(false)
       }
     }
 
@@ -40,20 +41,51 @@ export const AuthProvider = ({ children }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setUser(session?.user ?? null)
-
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
+        if (!session?.user) {
+          // ✅ Covers case where auth user deleted by admin
+          console.warn('Auth user deleted or logged out, signing out...')
+          await signOut()
+          return
         }
 
-        setLoading(false) // ✅ ensures spinner stops after state change
+        setUser(session.user)
+        await fetchProfile(session.user.id)
+        subscribeToProfile(session.user.id)
+        setLoading(false)
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      supabase.channel('profiles-changes').unsubscribe()
+    }
   }, [])
+
+  const subscribeToProfile = (userId) => {
+    // Prevent multiple subscriptions
+    supabase.channel('profiles-changes').unsubscribe()
+
+    supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${userId}`,
+        },
+        async (payload) => {
+          if (payload.eventType === 'DELETE') {
+            console.warn('Profile deleted, signing out...')
+            await signOut()
+          } else if (payload.eventType === 'UPDATE') {
+            setProfile(payload.new)
+          }
+        }
+      )
+      .subscribe()
+  }
 
   const fetchProfile = async (userId) => {
     try {
@@ -63,11 +95,16 @@ export const AuthProvider = ({ children }) => {
         .eq('id', userId)
         .single()
 
-      if (error) throw error
+      if (error || !data) {
+        console.warn('Profile missing or deleted, signing out...')
+        await signOut()
+        return
+      }
+
       setProfile(data)
     } catch (error) {
       console.error('Error fetching profile:', error.message)
-      setProfile(null)
+      await signOut()
     }
   }
 
@@ -93,6 +130,9 @@ export const AuthProvider = ({ children }) => {
   }
 
   const signOut = async () => {
+    setUser(null)
+    setProfile(null)
+    supabase.channel('profiles-changes').unsubscribe()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }
