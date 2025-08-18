@@ -13,12 +13,11 @@ const Register = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      await signUp(email)
-      toast.success('Check your email for the magic link!')
-      setEmail('')
-    } catch (error) {
-      console.error(error)
-      toast.error(error.message || 'Signup failed')
+      const result = await signUp(email)
+      if (result.redirectTo) navigate(result.redirectTo)
+      else toast.success('Check your email for the verification link!')
+    } catch (err) {
+      toast.error(err.message)
     } finally {
       setLoading(false)
     }
@@ -26,26 +25,21 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-6 rounded-xl shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-4">Register</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="email"
-            className="w-full border px-3 py-2 rounded-lg"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-black text-white py-2 rounded-lg disabled:opacity-50"
-          >
-            {loading ? 'Submitting...' : 'Register'}
-          </button>
-        </form>
-      </div>
+      <form className="bg-white p-8 rounded shadow-md w-full max-w-md" onSubmit={handleSubmit}>
+        <h2 className="text-2xl font-bold mb-6">Register</h2>
+        <label className="block mb-2">Email</label>
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          className="input w-full mb-4"
+          placeholder="Enter your email"
+          required
+        />
+        <button disabled={loading} className="btn-primary w-full">
+          {loading ? 'Sending...' : 'Register'}
+        </button>
+      </form>
     </div>
   )
 }
