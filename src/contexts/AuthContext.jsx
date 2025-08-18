@@ -11,14 +11,15 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Initial session load + subscription
+  // Initial session load + listener
   useEffect(() => {
-    const getSession = async () => {
+    const init = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       setUser(session?.user ?? null)
       setLoading(false)
     }
-    getSession()
+
+    init()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
@@ -27,12 +28,37 @@ export const AuthProvider = ({ children }) => {
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  // Fetch profile whenever user changes
+  useEffect(() => {
+    if (!user) {
+      setProfile(null)
+      return
+    }
+
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Error fetching profile:', error)
+        return
+      }
+
+      setProfile(data)
+    }
+
+    fetchProfile()
+  }, [user])
+
   // Magic link signup
   const signUp = async (email) => {
     return await supabase.auth.signInWithOtp({ email })
   }
 
-  // Normal login with email+password
+  // Login with email/password
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
@@ -42,11 +68,9 @@ export const AuthProvider = ({ children }) => {
 
   // Complete signup: set password + update profile
   const completeSignUp = async (password, userType, bio, name) => {
-    // Update auth user with password
     const { data, error } = await supabase.auth.updateUser({ password })
     if (error) throw error
 
-    // Update profile in your "profiles" table
     const { error: profileError } = await supabase.from('profiles').upsert({
       id: data.user.id,
       email: data.user.email,
