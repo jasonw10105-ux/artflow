@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  DollarSign,
+import {
+  Plus,
+  Edit,
+  Trash2,
   Upload,
   X,
   Save,
@@ -16,30 +14,46 @@ import toast from 'react-hot-toast'
 
 const ArtworkManagement = () => {
   const { profile } = useAuth()
+
+  const [mode, setMode] = useState('manage') // 'manage' | 'create'
   const [artworks, setArtworks] = useState([])
+  const [pendingArtworks, setPendingArtworks] = useState([]) // images uploaded but not yet saved
+  const [selectedPending, setSelectedPending] = useState(null) // which pending artwork is open in the form
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editingArtwork, setEditingArtwork] = useState(null)
   const [uploading, setUploading] = useState(false)
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    medium: '',
-    dimensions: '',
-    year: new Date().getFullYear(),
-    price: '',
-    currency: 'USD',
-    edition_size: '',
-    edition_number: '',
-    for_sale: false,
-    image_url: ''
-  })
+  const [formData, setFormData] = useState(initialFormData())
+
+  function initialFormData() {
+    return {
+      title: '',
+      description: '',
+      medium: '',
+      dimensions: '',
+      year: new Date().getFullYear(),
+      price: '',
+      currency: 'USD',
+      edition_size: '',
+      edition_number: '',
+      for_sale: false,
+      image_url: ''
+    }
+  }
 
   useEffect(() => {
-    if (profile) {
-      fetchArtworks()
-    }
+    if (profile) fetchArtworks()
   }, [profile])
+
+  // Warn if there are unsaved pending artworks
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (pendingArtworks.length > 0) {
+        e.preventDefault()
+        e.returnValue = 'You have unsaved artworks. Refreshing will lose them.'
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [pendingArtworks])
 
   const fetchArtworks = async () => {
     try {
@@ -61,51 +75,55 @@ const ArtworkManagement = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }))
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('File size must be less than 5MB')
-      return
-    }
+  const handleMultipleUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
 
     setUploading(true)
     try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${profile.id}/${Date.now()}.${fileExt}`
-      
-      const { data, error } = await supabase.storage
-        .from('artworks')
-        .upload(fileName, file)
+      const uploads = await Promise.all(
+        files.map(async (file) => {
+          if (file.size > 5 * 1024 * 1024) {
+            toast.error(`${file.name} is too large (>5MB)`)
+            return null
+          }
+          const fileExt = file.name.split('.').pop()
+          const fileName = `${profile.id}/${Date.now()}-${file.name}`
 
-      if (error) throw error
+          const { error } = await supabase.storage.from('artworks').upload(fileName, file)
+          if (error) throw error
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('artworks')
-        .getPublicUrl(fileName)
+          const { data: { publicUrl } } = supabase.storage.from('artworks').getPublicUrl(fileName)
+          return { image_url: publicUrl, temp: true }
+        })
+      )
 
-      setFormData(prev => ({ ...prev, image_url: publicUrl }))
-      toast.success('Image uploaded successfully')
-    } catch (error) {
-      console.error('Error uploading image:', error)
-      toast.error('Failed to upload image')
+      const validUploads = uploads.filter(Boolean)
+      setPendingArtworks(prev => [...prev, ...validUploads])
+      if (!selectedPending && validUploads.length > 0) {
+        setSelectedPending(validUploads[0])
+        setFormData({ ...initialFormData(), image_url: validUploads[0].image_url })
+      }
+      toast.success('Images uploaded. Select each to add details.')
+    } catch (err) {
+      console.error(err)
+      toast.error('Upload failed')
     } finally {
       setUploading(false)
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    
-    if (!formData.image_url) {
-      toast.error('Please upload an image')
+  const selectPendingArtwork = (art) => {
+    setSelectedPending(art)
+    setFormData({ ...initialFormData(), ...art })
+  }
+
+  const handleSavePending = async () => {
+    if (!formData.title || !formData.year || !formData.image_url) {
+      toast.error('Title, Year, and Image are required')
       return
     }
 
@@ -119,97 +137,33 @@ const ArtworkManagement = () => {
         year: parseInt(formData.year)
       }
 
-      if (editingArtwork) {
-        const { error } = await supabase
-          .from('artworks')
-          .update(artworkData)
-          .eq('id', editingArtwork.id)
-        
-        if (error) throw error
-        toast.success('Artwork updated successfully')
-      } else {
-        const { error } = await supabase
-          .from('artworks')
-          .insert([artworkData])
-        
-        if (error) throw error
-        toast.success('Artwork added successfully')
-      }
+      const { error } = await supabase.from('artworks').insert([artworkData])
+      if (error) throw error
 
-      setShowModal(false)
-      setEditingArtwork(null)
-      setFormData({
-        title: '',
-        description: '',
-        medium: '',
-        dimensions: '',
-        year: new Date().getFullYear(),
-        price: '',
-        currency: 'USD',
-        edition_size: '',
-        edition_number: '',
-        for_sale: false,
-        image_url: ''
-      })
+      toast.success('Artwork saved successfully')
+
+      // Remove from pending
+      setPendingArtworks(prev => prev.filter(p => p.image_url !== selectedPending.image_url))
+      setSelectedPending(null)
+      setFormData(initialFormData())
       fetchArtworks()
-    } catch (error) {
-      console.error('Error saving artwork:', error)
+    } catch (err) {
+      console.error(err)
       toast.error('Failed to save artwork')
     }
   }
 
-  const handleEdit = (artwork) => {
-    setEditingArtwork(artwork)
-    setFormData({
-      title: artwork.title || '',
-      description: artwork.description || '',
-      medium: artwork.medium || '',
-      dimensions: artwork.dimensions || '',
-      year: artwork.year || new Date().getFullYear(),
-      price: artwork.price || '',
-      currency: artwork.currency || 'USD',
-      edition_size: artwork.edition_size || '',
-      edition_number: artwork.edition_number || '',
-      for_sale: artwork.for_sale || false,
-      image_url: artwork.image_url || ''
-    })
-    setShowModal(true)
-  }
-
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this artwork?')) return
-
     try {
-      const { error } = await supabase
-        .from('artworks')
-        .delete()
-        .eq('id', id)
-
+      const { error } = await supabase.from('artworks').delete().eq('id', id)
       if (error) throw error
       toast.success('Artwork deleted successfully')
       fetchArtworks()
-    } catch (error) {
-      console.error('Error deleting artwork:', error)
+    } catch (err) {
+      console.error(err)
       toast.error('Failed to delete artwork')
     }
-  }
-
-  const openAddModal = () => {
-    setEditingArtwork(null)
-    setFormData({
-      title: '',
-      description: '',
-      medium: '',
-      dimensions: '',
-      year: new Date().getFullYear(),
-      price: '',
-      currency: 'USD',
-      edition_size: '',
-      edition_number: '',
-      for_sale: false,
-      image_url: ''
-    })
-    setShowModal(true)
   }
 
   if (loading) {
@@ -232,309 +186,233 @@ const ArtworkManagement = () => {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Artwork Management</h1>
-        <button
-          onClick={openAddModal}
-          className="btn-primary flex items-center space-x-2"
-        >
-          <Plus className="h-5 w-5" />
-          <span>Add Artwork</span>
-        </button>
-      </div>
+    <div className="p-6 max-w-7xl mx-auto flex gap-6">
+      {mode === 'manage' && (
+        <div className="flex-1">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold text-gray-900">Artwork Management</h1>
+            <button
+              onClick={() => setMode('create')}
+              className="btn-primary flex items-center space-x-2"
+            >
+              <Plus className="h-5 w-5" />
+              <span>Add Artwork</span>
+            </button>
+          </div>
 
-      {artworks.length === 0 ? (
-        <div className="text-center py-12">
-          <ImageIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No artworks yet</h3>
-          <p className="text-gray-500 mb-6">Start building your portfolio by adding your first artwork</p>
-          <button
-            onClick={openAddModal}
-            className="btn-primary"
-          >
-            Add Your First Artwork
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {artworks.map((artwork) => (
-            <div key={artwork.id} className="card overflow-hidden">
-              <div className="relative">
-                <img
-                  src={artwork.image_url}
-                  alt={artwork.title}
-                  className="w-full h-48 object-cover"
-                />
-                {artwork.for_sale && (
-                  <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs font-medium">
-                    For Sale
-                  </div>
-                )}
-              </div>
-              
-              <div className="p-4">
-                <h3 className="font-semibold text-gray-900 mb-1">{artwork.title}</h3>
-                <p className="text-sm text-gray-600 mb-2">{artwork.medium} • {artwork.year}</p>
-                {artwork.dimensions && (
-                  <p className="text-sm text-gray-500 mb-2">{artwork.dimensions}</p>
-                )}
-                {artwork.price && (
-                  <p className="text-sm font-medium text-green-600 mb-3">
-                    {artwork.currency} {artwork.price}
-                  </p>
-                )}
-                
-                <div className="flex justify-between items-center">
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleEdit(artwork)}
-                      className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(artwork.id)}
-                      className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  
-                  {artwork.edition_size && (
-                    <span className="text-xs text-gray-500">
-                      {artwork.edition_number || '?'}/{artwork.edition_size}
-                    </span>
-                  )}
-                </div>
-              </div>
+          {artworks.length === 0 ? (
+            <div className="text-center py-12">
+              <ImageIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No artworks yet</h3>
+              <p className="text-gray-500 mb-6">Start building your portfolio by adding your first artwork</p>
             </div>
-          ))}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {artworks.map((artwork) => (
+                <div key={artwork.id} className="card overflow-hidden">
+                  <img src={artwork.image_url} alt={artwork.title} className="w-full h-48 object-cover" />
+                  <div className="p-4">
+                    <h3 className="font-semibold text-gray-900 mb-1">{artwork.title}</h3>
+                    <p className="text-sm text-gray-600 mb-2">{artwork.medium} • {artwork.year}</p>
+                    <div className="flex justify-between items-center">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => toast('Editing not implemented yet in manage mode')}
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(artwork.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold">
-                {editingArtwork ? 'Edit Artwork' : 'Add New Artwork'}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
+      {mode === 'create' && (
+        <>
+          {/* Sidebar */}
+          <div className="w-1/4 border-r pr-4 flex flex-col">
+            <h2 className="text-lg font-semibold mb-4">Pending Artworks</h2>
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {pendingArtworks.map((art, idx) => (
+                <div
+                  key={idx}
+                  className={`border rounded overflow-hidden cursor-pointer ${selectedPending?.image_url === art.image_url ? 'ring-2 ring-primary-500' : ''}`}
+                  onClick={() => selectPendingArtwork(art)}
+                >
+                  <img src={art.image_url} className="w-full h-24 object-cover" />
+                </div>
+              ))}
+              {pendingArtworks.length === 0 && (
+                <p className="text-gray-500 text-sm">No pending artworks. Upload some!</p>
+              )}
             </div>
+            <label className="btn-primary mt-4 flex items-center justify-center cursor-pointer">
+              <Upload className="h-4 w-4 mr-2" /> Add More Works
+              <input type="file" multiple className="hidden" accept="image/*" onChange={handleMultipleUpload} disabled={uploading} />
+            </label>
+            <button
+              className="btn-secondary mt-2"
+              onClick={() => setMode('manage')}
+              disabled={pendingArtworks.length > 0}
+            >
+              Finish
+            </button>
+          </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Image Upload */}
+          {/* Main Form */}
+          <div className="flex-1 pl-6">
+            {selectedPending ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Artwork Image
-                </label>
-                {formData.image_url ? (
-                  <div className="relative">
-                    <img
-                      src={formData.image_url}
-                      alt="Preview"
-                      className="w-full h-48 object-cover rounded-lg"
+                <h2 className="text-2xl font-semibold mb-4">Artwork Details</h2>
+                <div className="space-y-4">
+                  <div>
+                    <img src={formData.image_url} className="w-full h-64 object-cover rounded" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                      <input
+                        type="text"
+                        name="title"
+                        value={formData.title}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Medium</label>
+                      <input
+                        type="text"
+                        name="medium"
+                        value={formData.medium}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        placeholder="Oil on canvas, Digital, etc."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Dimensions</label>
+                      <input
+                        type="text"
+                        name="dimensions"
+                        value={formData.dimensions}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        placeholder="24 x 36 inches"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Year *</label>
+                      <input
+                        type="number"
+                        name="year"
+                        value={formData.year}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        min="1900"
+                        max={new Date().getFullYear()}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                      <input
+                        type="number"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        step="0.01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                      <select
+                        name="currency"
+                        value={formData.currency}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                      >
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="GBP">GBP</option>
+                        <option value="ZAR">ZAR</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Edition Size</label>
+                      <input
+                        type="number"
+                        name="edition_size"
+                        value={formData.edition_size}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Edition Number</label>
+                      <input
+                        type="number"
+                        name="edition_number"
+                        value={formData.edition_number}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      className="input w-full"
+                      rows="3"
+                      placeholder="Describe your artwork..."
                     />
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="for_sale"
+                      checked={formData.for_sale}
+                      onChange={handleInputChange}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <label className="ml-2 block text-sm text-gray-700">Available for sale</label>
+                  </div>
+
+                  <div className="flex justify-end pt-4">
                     <button
                       type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, image_url: '' }))}
-                      className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"
+                      onClick={handleSavePending}
+                      className="btn-primary flex items-center space-x-2"
                     >
-                      <X className="h-4 w-4" />
+                      <Save className="h-4 w-4" />
+                      <span>Save Artwork</span>
                     </button>
                   </div>
-                ) : (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                    <Upload className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <label className="cursor-pointer">
-                      <span className="text-primary-600 hover:text-primary-500">
-                        {uploading ? 'Uploading...' : 'Click to upload'}
-                      </span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        disabled={uploading}
-                      />
-                    </label>
-                    <p className="text-sm text-gray-500">PNG, JPG up to 5MB</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Title *
-                  </label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    className="input"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Medium
-                  </label>
-                  <input
-                    type="text"
-                    name="medium"
-                    value={formData.medium}
-                    onChange={handleInputChange}
-                    className="input"
-                    placeholder="Oil on canvas, Digital, etc."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dimensions
-                  </label>
-                  <input
-                    type="text"
-                    name="dimensions"
-                    value={formData.dimensions}
-                    onChange={handleInputChange}
-                    className="input"
-                    placeholder="24 x 36 inches"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Year
-                  </label>
-                  <input
-                    type="number"
-                    name="year"
-                    value={formData.year}
-                    onChange={handleInputChange}
-                    className="input"
-                    min="1900"
-                    max={new Date().getFullYear()}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Price
-                  </label>
-                  <input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleInputChange}
-                    className="input"
-                    step="0.01"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Currency
-                  </label>
-                  <select
-                    name="currency"
-                    value={formData.currency}
-                    onChange={handleInputChange}
-                    className="input"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="ZAR">ZAR</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Edition Size
-                  </label>
-                  <input
-                    type="number"
-                    name="edition_size"
-                    value={formData.edition_size}
-                    onChange={handleInputChange}
-                    className="input"
-                    min="1"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Edition Number
-                  </label>
-                  <input
-                    type="number"
-                    name="edition_number"
-                    value={formData.edition_number}
-                    onChange={handleInputChange}
-                    className="input"
-                    min="1"
-                  />
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="input"
-                  rows="3"
-                  placeholder="Describe your artwork..."
-                />
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="for_sale"
-                  checked={formData.for_sale}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm text-gray-700">
-                  Available for sale
-                </label>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploading || !formData.image_url}
-                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>{editingArtwork ? 'Update' : 'Add'} Artwork</span>
-                </button>
-              </div>
-            </form>
+            ) : (
+              <p className="text-gray-500">Select a pending artwork to add details.</p>
+            )}
           </div>
-        </div>
+        </>
       )}
     </div>
   )
