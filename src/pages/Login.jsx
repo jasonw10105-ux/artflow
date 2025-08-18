@@ -5,7 +5,7 @@ import { Eye, EyeOff, Palette } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const Login = () => {
-  const { signIn, checkPasswordSet } = useAuth() // checkPasswordSet checks if the user has a password
+  const { signIn, checkPasswordSet } = useAuth()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -20,13 +20,12 @@ const Login = () => {
     setLoading(true)
 
     try {
-      // Attempt to sign in
-      await signIn(formData.email, formData.password)
+      const user = await signIn(formData.email, formData.password)
 
-      // Check if password is set
-      const passwordSet = await checkPasswordSet(formData.email)
+      // Check if the user has a password set
+      const passwordSet = await checkPasswordSet(user.id)
       if (!passwordSet) {
-        toast('Please set your password to continue.')
+        toast('Please set your password to continue')
         navigate('/set-password')
         return
       }
@@ -34,7 +33,6 @@ const Login = () => {
       toast.success('Welcome back!')
       navigate('/dashboard')
     } catch (error) {
-      // Handle unverified email
       if (error.message.includes('Email not confirmed')) {
         toast.error('Please verify your email before logging in.')
       } else {
