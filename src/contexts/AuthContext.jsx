@@ -26,11 +26,13 @@ export const AuthProvider = ({ children }) => {
 
         if (session?.user) {
           await fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
         }
       } catch (err) {
         console.error('Error getting session:', err.message)
       } finally {
-        setLoading(false)
+        setLoading(false) // ✅ always clears loading
       }
     }
 
@@ -46,7 +48,7 @@ export const AuthProvider = ({ children }) => {
           setProfile(null)
         }
 
-        setLoading(false)
+        setLoading(false) // ✅ ensures spinner stops after state change
       }
     )
 
@@ -69,48 +71,31 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const value = {
-    user,
-    profile,
-    loading,
-    signUp: async (email, password, userData) => {
-      const { data, error } = await supabase.auth.signUp({ email, password })
-      if (error) throw error
+  const signUp = async (email, password, userData) => {
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) throw error
 
-      if (data.user) {
-        await supabase.from('profiles').insert([{ id: data.user.id, email: data.user.email, ...userData }])
-      }
-
-      return data
-    },
-    signIn: async (email, password) => {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
-      return data
-    },
-    signOut: async () => {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-    },
-    updateProfile: async (updates) => {
-      if (!user) throw new Error('No user logged in')
-
-      const { data, error } = await supabase
+    if (data.user) {
+      const { error: profileError } = await supabase
         .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
-        .select()
-        .single()
+        .insert([{ id: data.user.id, email: data.user.email, ...userData }])
 
-      if (error) throw error
-      setProfile(data)
-      return data
+      if (profileError) throw profileError
     }
+
+    return data
   }
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
-}
+  const signIn = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    return data
+  }
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+  }
+
+  const updateProfile = async (updates) => {
+    if (!user) throw new Error('
