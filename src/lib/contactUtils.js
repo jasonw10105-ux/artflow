@@ -1,5 +1,5 @@
 // src/lib/contactUtils.js
-import { supabase } from './supabase'
+import { supabase } from '../lib/supabase.js'
 
 // Parse CSV file into array of contacts
 export async function parseCSV(file) {
