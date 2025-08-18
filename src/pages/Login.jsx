@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import { Eye, EyeOff, Palette } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const Login = () => {
-  const { signIn, needsPasswordSetup } = useAuth()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -20,14 +19,12 @@ const Login = () => {
     setLoading(true)
 
     try {
-      await signIn(formData.email, formData.password)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
+      })
 
-      // If user exists but has no password, redirect to /set-password
-      if (needsPasswordSetup) {
-        toast('Please set your password to continue')
-        navigate('/set-password')
-        return
-      }
+      if (error) throw error
 
       toast.success('Welcome back!')
       navigate('/dashboard')
