@@ -23,10 +23,7 @@ const ArtistProfile = () => {
   const [catalogues, setCatalogues] = useState([])
   const [loading, setLoading] = useState(true)
   const [inquiryModal, setInquiryModal] = useState(false)
-  const [inquiryForm, setInquiryForm] = useState({
-    email: '',
-    message: ''
-  })
+  const [inquiryForm, setInquiryForm] = useState({ email: '', message: '' })
 
   useEffect(() => {
     fetchArtistData()
@@ -35,12 +32,12 @@ const ArtistProfile = () => {
 
   const fetchArtistData = async () => {
     try {
-      // Fetch artist profile
+      // Fetch artist profile (supports multi-role)
       const { data: artistData, error: artistError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', artistId)
-        .eq('user_type', 'artist')
+        .contains('user_type', ['artist']) // ensure user is an artist
         .single()
 
       if (artistError) throw artistError
@@ -164,49 +161,45 @@ const ArtistProfile = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <Link to="/" className="flex items-center text-gray-600 hover:text-gray-900">
-              <ArrowLeft className="h-5 w-5 mr-2" />
-              Back to Home
-            </Link>
-            
-            <button
-              onClick={openInquiryModal}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <MessageSquare className="h-4 w-4" />
-              <span>Contact Artist</span>
-            </button>
-          </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
+          <Link to="/" className="flex items-center text-gray-600 hover:text-gray-900">
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            Back to Home
+          </Link>
+          
+          <button
+            onClick={openInquiryModal}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span>Contact Artist</span>
+          </button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Artist Info */}
-        <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-          <div className="flex items-start space-x-6">
-            <div className="bg-gray-200 rounded-full w-24 h-24 flex items-center justify-center">
-              <User className="h-12 w-12 text-gray-400" />
-            </div>
+        <div className="bg-white rounded-lg shadow-md p-8 mb-8 flex items-start space-x-6">
+          <div className="bg-gray-200 rounded-full w-24 h-24 flex items-center justify-center">
+            <User className="h-12 w-12 text-gray-400" />
+          </div>
+          
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">{artist.name}</h1>
+            <p className="text-gray-600 mb-4">{artist.bio}</p>
             
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{artist.name}</h1>
-              <p className="text-gray-600 mb-4">{artist.bio}</p>
-              
-              <div className="flex items-center space-x-6 text-sm text-gray-500">
-                <div className="flex items-center">
-                  <Palette className="h-4 w-4 mr-1" />
-                  <span>{artworks.length} artworks</span>
-                </div>
-                <div className="flex items-center">
-                  <FolderOpen className="h-4 w-4 mr-1" />
-                  <span>{catalogues.length} catalogues</span>
-                </div>
-                <div className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  <span>Joined {new Date(artist.created_at).toLocaleDateString()}</span>
-                </div>
+            <div className="flex items-center space-x-6 text-sm text-gray-500">
+              <div className="flex items-center">
+                <Palette className="h-4 w-4 mr-1" />
+                <span>{artworks.length} artworks</span>
+              </div>
+              <div className="flex items-center">
+                <FolderOpen className="h-4 w-4 mr-1" />
+                <span>{catalogues.length} catalogues</span>
+              </div>
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                <span>Joined {new Date(artist.created_at).toLocaleDateString()}</span>
               </div>
             </div>
           </div>
@@ -300,10 +293,7 @@ const ArtistProfile = () => {
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="flex justify-between items-center p-6 border-b">
               <h3 className="text-lg font-semibold">Contact {artist.name}</h3>
-              <button
-                onClick={() => setInquiryModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => setInquiryModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="h-6 w-6" />
               </button>
             </div>
@@ -319,9 +309,7 @@ const ArtistProfile = () => {
               )}
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Your Email
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Your Email</label>
                 <input
                   type="email"
                   value={inquiryForm.email}
@@ -333,9 +321,7 @@ const ArtistProfile = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Message
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
                 <textarea
                   value={inquiryForm.message}
                   onChange={(e) => setInquiryForm(prev => ({ ...prev, message: e.target.value }))}
@@ -348,18 +334,8 @@ const ArtistProfile = () => {
               </div>
               
               <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setInquiryModal(false)}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!user}
-                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <button type="button" onClick={() => setInquiryModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" disabled={!user} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
                   Send Inquiry
                 </button>
               </div>
