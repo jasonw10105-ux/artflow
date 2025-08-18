@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { supabase } from '../lib/supabase'
 
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
@@ -19,38 +18,38 @@ const SetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
+  const [magicToken, setMagicToken] = useState(null)
+  const [linkError, setLinkError] = useState('')
 
-  // Handle magic link
+  // Extract token and error from URL
   useEffect(() => {
-    const handleMagicLink = async () => {
-      const hash = window.location.hash
-      if (hash.includes('access_token')) {
-        const params = new URLSearchParams(hash.replace('#', ''))
-        const access_token = params.get('access_token')
-        if (access_token) {
-          const { data, error } = await supabase.auth.setSession({ access_token })
-          if (error) {
-            toast.error('Failed to set session from magic link')
-            navigate('/register')
-          } else {
-            setEmail(data.user.email)
-          }
-        }
-      } else if (hash.includes('error')) {
-        const params = new URLSearchParams(hash.replace('#', ''))
-        const errorDescription = params.get('error_description')
-        toast.error(errorDescription || 'Magic link error')
+    const hash = window.location.hash
+    if (hash.includes('access_token')) {
+      const params = new URLSearchParams(hash.replace('#', ''))
+      setMagicToken(params.get('access_token'))
+    } else if (hash.includes('error')) {
+      const params = new URLSearchParams(hash.replace('#', ''))
+      setLinkError(params.get('error_description') || 'Invalid or expired link')
+    }
+  }, [])
+
+  // Redirect or set email once auth state is ready
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user && !magicToken && !linkError) {
+        toast.error('No active session found. Please request a new link.')
         navigate('/register')
       } else if (user) {
         setEmail(user.email)
       }
     }
-
-    handleMagicLink()
-  }, [user, navigate])
+  }, [authLoading, user, magicToken, linkError, navigate])
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -68,7 +67,7 @@ const SetPassword = () => {
 
     setLoading(true)
     try {
-      await completeSignUp(formData.password, formData.userType, formData.bio)
+      await completeSignUp(formData.password, formData.userType, formData.bio, magicToken)
       toast.success('Account setup complete!')
       navigate('/dashboard')
     } catch (error) {
@@ -79,7 +78,23 @@ const SetPassword = () => {
     }
   }
 
-  if (authLoading || !email) {
+  // Show error message if magic link is invalid or expired
+  if (linkError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 bg-gray-50">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Link Error</h2>
+        <p className="text-gray-700 mb-6 text-center">{linkError}</p>
+        <button
+          onClick={() => navigate('/register')}
+          className="btn-primary"
+        >
+          Request a New Link
+        </button>
+      </div>
+    )
+  }
+
+  if (authLoading || (!user && !magicToken)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -95,8 +110,8 @@ const SetPassword = () => {
         </h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {/* Account Type */}
           <div className="space-y-4">
-            {/* Account Type */}
             <div>
               <label htmlFor="userType" className="block text-sm font-medium text-gray-700">
                 Account Type
