@@ -16,32 +16,6 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // 🧭 Helper: fetch profile or auto-logout if missing
-  const fetchProfile = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (error || !data) {
-        console.warn('No profile found, signing out user')
-        await supabase.auth.signOut()
-        setProfile(null)
-        return null
-      }
-
-      setProfile(data)
-      return data
-    } catch (err) {
-      console.error('Error fetching profile:', err.message)
-      await supabase.auth.signOut()
-      setProfile(null)
-      return null
-    }
-  }
-
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -49,8 +23,10 @@ export const AuthProvider = ({ children }) => {
         if (error) throw error
 
         setUser(session?.user ?? null)
+
         if (session?.user) {
           await fetchProfile(session.user.id)
+          subscribeToProfile(session.user.id)
         } else {
           setProfile(null)
         }
@@ -63,36 +39,98 @@ export const AuthProvider = ({ children }) => {
 
     initAuth()
 
-    // 🔔 Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
+        if (!session?.user) {
+          await signOut()
+          return
         }
+
+        setUser(session.user)
+        await fetchProfile(session.user.id)
+        subscribeToProfile(session.user.id)
         setLoading(false)
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      supabase.channel('profiles-changes').unsubscribe()
+    }
   }, [])
 
-  // 🧙 Sign up new users (auth + profile row)
-  const signUp = async (email, password, userData) => {
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) throw error
+  const subscribeToProfile = (userId) => {
+    supabase.channel('profiles-changes').unsubscribe()
 
-    if (data.user) {
-      const { error: profileError } = await supabase
+    supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${userId}`,
+        },
+        async (payload) => {
+          if (payload.eventType === 'DELETE') {
+            await signOut()
+          } else if (payload.eventType === 'UPDATE') {
+            setProfile(payload.new)
+          }
+        }
+      )
+      .subscribe()
+  }
+
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase
         .from('profiles')
-        .insert([{ id: data.user.id, email: data.user.email, ...userData }])
+        .select('*')
+        .eq('id', userId)
+        .single()
 
-      if (profileError) throw profileError
+      if (error || !data) {
+        await signOut()
+        return
+      }
+
+      setProfile(data)
+    } catch (error) {
+      console.error('Error fetching profile:', error.message)
+      await signOut()
     }
+  }
 
+  const signUp = async (email) => {
+    const { data, error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/set-password` } })
+    if (error) throw error
     return data
+  }
+
+  const completeSignUp = async (password, userType, bio) => {
+    if (!user) throw new Error('No user session found')
+
+    // Update password
+    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
+    if (authError) throw authError
+
+    // Update profile
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        email: user.email,
+        user_type: userType,
+        bio
+      })
+      .select()
+      .single()
+    if (profileError) throw profileError
+
+    setProfile(profileData)
+    return profileData
   }
 
   const signIn = async (email, password) => {
@@ -102,10 +140,11 @@ export const AuthProvider = ({ children }) => {
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
     setUser(null)
     setProfile(null)
+    supabase.channel('profiles-changes').unsubscribe()
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
   }
 
   const updateProfile = async (updates) => {
@@ -123,60 +162,16 @@ export const AuthProvider = ({ children }) => {
     return data
   }
 
-  const sendVerificationEmail = async (email) => {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/set-password` }
-    })
-    if (error) throw error
-    return data
-  }
-
-  const setPassword = async (email, password, userData) => {
-    const { data: userDataResponse, error: userError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('email', email)
-      .single()
-
-    if (userError && userError.code !== 'PGRST116') throw userError
-
-    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
-    if (authError) throw authError
-
-    if (userDataResponse) {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .update(userData)
-        .eq('email', email)
-        .select()
-        .single()
-      if (profileError) throw profileError
-      setProfile(profileData)
-    } else {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .insert([{ email, ...userData }])
-        .select()
-        .single()
-      if (profileError) throw profileError
-      setProfile(profileData)
-    }
-
-    return authData
-  }
-
   const value = {
     user,
     profile,
     loading,
     signUp,
+    completeSignUp,
     signIn,
     signOut,
     updateProfile,
-    fetchProfile,
-    sendVerificationEmail,
-    setPassword,
+    fetchProfile
   }
 
   return (
