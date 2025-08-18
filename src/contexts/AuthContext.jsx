@@ -1,4 +1,3 @@
-// src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -15,13 +14,10 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // ==========================
-  // Initialize auth session
-  // ==========================
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Handle magic link if present in URL
+        // 1. Check URL hash for access_token from magic link
         const hash = window.location.hash
         if (hash.includes('access_token')) {
           const params = new URLSearchParams(hash.replace('#', ''))
@@ -29,21 +25,27 @@ export const AuthProvider = ({ children }) => {
           const refresh_token = params.get('refresh_token')
 
           if (access_token && refresh_token) {
-            const { data, error } = await supabase.auth.setSession({ access_token, refresh_token })
+            const { data, error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token
+            })
             if (error) throw error
             console.log('Magic link session set', data)
             window.history.replaceState({}, document.title, window.location.pathname)
           }
         }
 
-        // Get current session
+        // 2. Get current session
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) throw error
         setUser(session?.user ?? null)
+
         if (session?.user) {
           await fetchProfile(session.user.id)
           subscribeToProfile(session.user.id)
-        } else setProfile(null)
+        } else {
+          setProfile(null)
+        }
       } catch (err) {
         console.error('Error initializing auth:', err)
       } finally {
@@ -53,7 +55,7 @@ export const AuthProvider = ({ children }) => {
 
     initAuth()
 
-    // Subscribe to auth state changes
+    // Listen to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!session?.user) {
         await signOut()
@@ -71,9 +73,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
-  // ==========================
-  // Profile subscription
-  // ==========================
   const subscribeToProfile = (userId) => {
     supabase.channel('profiles-changes').unsubscribe()
     supabase
@@ -89,9 +88,6 @@ export const AuthProvider = ({ children }) => {
       .subscribe()
   }
 
-  // ==========================
-  // Fetch profile from DB
-  // ==========================
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
@@ -106,12 +102,14 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // ==========================
-  // Sign up with magic link
-  // ==========================
+  // --- Auth actions ---
+
   const signUp = async (email) => {
+    // Check if email already exists
     const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).single()
     if (existing) throw new Error('Email already exists. Please log in.')
+
+    // Send magic link
     const { data, error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: `${window.location.origin}/set-password` }
@@ -120,14 +118,14 @@ export const AuthProvider = ({ children }) => {
     return data
   }
 
-  // ==========================
-  // Complete signup with password & profile
-  // ==========================
   const completeSignUp = async (password, userType, bio, name) => {
     if (!user) throw new Error('No user session found')
+
+    // 1. Update password
     const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
     if (authError) throw authError
 
+    // 2. Upsert profile
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .upsert({ id: user.id, email: user.email, user_type: userType, bio, name })
@@ -139,18 +137,12 @@ export const AuthProvider = ({ children }) => {
     return profileData
   }
 
-  // ==========================
-  // Sign in with email/password
-  // ==========================
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     return data
   }
 
-  // ==========================
-  // Sign out
-  // ==========================
   const signOut = async () => {
     setUser(null)
     setProfile(null)
@@ -159,9 +151,6 @@ export const AuthProvider = ({ children }) => {
     if (error) throw error
   }
 
-  // ==========================
-  // Update profile
-  // ==========================
   const updateProfile = async (updates) => {
     if (!user) throw new Error('No user logged in')
     const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
