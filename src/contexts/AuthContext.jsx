@@ -5,9 +5,7 @@ const AuthContext = createContext(null)
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
   return context
 }
 
@@ -25,7 +23,7 @@ export const AuthProvider = ({ children }) => {
         setUser(session?.user ?? null)
 
         if (session?.user) {
-          await fetchProfile(session.user.id)
+          await ensureProfile(session.user)
           subscribeToProfile(session.user.id)
         } else {
           setProfile(null)
@@ -47,7 +45,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         setUser(session.user)
-        await fetchProfile(session.user.id)
+        await ensureProfile(session.user)
         subscribeToProfile(session.user.id)
         setLoading(false)
       }
@@ -66,12 +64,7 @@ export const AuthProvider = ({ children }) => {
       .channel('profiles-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${userId}`,
-        },
+        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         async (payload) => {
           if (payload.eventType === 'DELETE') {
             await signOut()
@@ -83,28 +76,40 @@ export const AuthProvider = ({ children }) => {
       .subscribe()
   }
 
-  const fetchProfile = async (userId) => {
+  // Ensure a profile exists for the logged-in user
+  const ensureProfile = async (user) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', user.id)
         .single()
 
-      if (error || !data) {
-        await signOut()
-        return
+      if (error && error.code === 'PGRST116') {
+        // Profile not found, create it
+        const { data: profileData, error: insertError } = await supabase
+          .from('profiles')
+          .insert([{ id: user.id, email: user.email }])
+          .select()
+          .single()
+        if (insertError) throw insertError
+        setProfile(profileData)
+      } else if (error) {
+        throw error
+      } else {
+        setProfile(data)
       }
-
-      setProfile(data)
-    } catch (error) {
-      console.error('Error fetching profile:', error.message)
-      await signOut()
+    } catch (err) {
+      console.error('Error ensuring profile:', err.message)
+      setProfile(null)
     }
   }
 
   const signUp = async (email) => {
-    const { data, error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/set-password` } })
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/set-password` }
+    })
     if (error) throw error
     return data
   }
@@ -116,7 +121,7 @@ export const AuthProvider = ({ children }) => {
     const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
     if (authError) throw authError
 
-    // Update profile
+    // Upsert profile with role and bio
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .upsert({
@@ -156,8 +161,8 @@ export const AuthProvider = ({ children }) => {
       .eq('id', user.id)
       .select()
       .single()
-
     if (error) throw error
+
     setProfile(data)
     return data
   }
@@ -171,7 +176,7 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     updateProfile,
-    fetchProfile
+    fetchProfile: () => ensureProfile(user)
   }
 
   return (
