@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
 
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
@@ -19,17 +21,35 @@ const SetPassword = () => {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      toast.error('No active session found. Please request a new link.')
-      navigate('/register')
+    const handleMagicLink = async () => {
+      if (!authLoading && !user) {
+        const hash = location.hash
+        if (hash.includes('access_token')) {
+          const params = new URLSearchParams(hash.replace('#', ''))
+          const access_token = params.get('access_token')
+
+          if (access_token) {
+            const { error } = await supabase.auth.setSession({ access_token })
+            if (error) {
+              toast.error('Invalid or expired link. Please request a new one.')
+              navigate('/register')
+              return
+            }
+          }
+        }
+
+        if (!supabase.auth.getUser()) {
+          toast.error('No active session found. Please request a new link.')
+          navigate('/register')
+        }
+      }
     }
-  }, [authLoading, user, navigate])
+
+    handleMagicLink()
+  }, [authLoading, user, location, navigate])
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
+    setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
   const handleSubmit = async (e) => {
@@ -74,120 +94,108 @@ const SetPassword = () => {
         </h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="userType" className="block text-sm font-medium text-gray-700">
-                Account Type
-              </label>
-              <select
-                id="userType"
-                name="userType"
-                value={formData.userType}
-                onChange={handleChange}
-                className="input mt-1"
-              >
-                <option value="artist">Artist</option>
-                <option value="collector">Collector</option>
-              </select>
-            </div>
+          {/* Account Type */}
+          <div>
+            <label htmlFor="userType" className="block text-sm font-medium text-gray-700">
+              Account Type
+            </label>
+            <select
+              id="userType"
+              name="userType"
+              value={formData.userType}
+              onChange={handleChange}
+              className="input mt-1 w-full"
+            >
+              <option value="artist">Artist</option>
+              <option value="collector">Collector</option>
+            </select>
+          </div>
 
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Full Name
-              </label>
+          {/* Name */}
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+              Full Name
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              required
+              value={formData.name}
+              onChange={handleChange}
+              className="input mt-1 w-full"
+              placeholder="Enter your full name"
+            />
+          </div>
+
+          {/* Bio */}
+          <div>
+            <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
+              Bio {formData.userType === 'collector' ? '(Optional)' : ''}
+            </label>
+            <textarea
+              id="bio"
+              name="bio"
+              rows={3}
+              value={formData.bio}
+              onChange={handleChange}
+              className="input mt-1 w-full"
+              placeholder={
+                formData.userType === 'artist'
+                  ? 'Tell us about your artistic style and background...'
+                  : 'Tell us about your collecting interests...'
+              }
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              Password
+            </label>
+            <div className="mt-1 relative">
               <input
-                id="name"
-                name="name"
-                type="text"
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
                 required
-                value={formData.name}
+                value={formData.password}
                 onChange={handleChange}
-                className="input mt-1"
-                placeholder="Enter your full name"
+                className="input pr-10 w-full"
+                placeholder="Enter your password"
               />
-            </div>
-
-            <div>
-              <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
-                Bio {formData.userType === 'collector' ? '(Optional)' : ''}
-              </label>
-              <textarea
-                id="bio"
-                name="bio"
-                rows={3}
-                value={formData.bio}
-                onChange={handleChange}
-                className="input mt-1"
-                placeholder={
-                  formData.userType === 'artist'
-                    ? 'Tell us about your artistic style and background...'
-                    : 'Tell us about your collecting interests...'
-                }
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="input pr-10"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="input pr-10"
-                  placeholder="Confirm your password"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
-                </button>
-              </div>
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
+              </button>
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Creating...' : 'Create Account'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-export default SetPassword
+          {/* Confirm Password */}
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+              Confirm Password
+            </label>
+            <div className="mt-1 relative">
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                className="input pr-10 w-full"
+                placeholder="Confirm your password"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
+              </button>
+            </div>
+          </div>
