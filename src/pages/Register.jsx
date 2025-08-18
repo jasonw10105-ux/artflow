@@ -1,8 +1,8 @@
+// src/pages/Register.jsx
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
-import { supabase } from '../lib/supabase'
 
 const Register = () => {
   const { signUp } = useAuth()
@@ -15,18 +15,18 @@ const Register = () => {
     setLoading(true)
 
     try {
-      // Check if the user already exists in Supabase Auth
-      const { data: existingUser, error } = await supabase.auth.admin.getUserByEmail(email)
-      if (error && error.message !== 'User not found') throw error
+      const { error } = await signUp(email)
 
-      if (existingUser?.user) {
-        toast('This email is already registered. Please log in or reset your password.')
-        navigate('/login')
-        return
+      if (error) {
+        // If Supabase says user already exists
+        if (error.message.toLowerCase().includes('already registered')) {
+          toast('This email is already registered. Please log in.')
+          navigate('/login')
+          return
+        }
+        throw error
       }
 
-      // User doesn't exist → send magic link
-      await signUp(email)
       toast.success('Check your email to verify. Then set your password.')
       navigate('/set-password')
     } catch (err) {
@@ -44,7 +44,9 @@ const Register = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              Email address
+            </label>
             <input
               id="email"
               name="email"
@@ -57,7 +59,11 @@ const Register = () => {
             />
           </div>
 
-          <button type="submit" disabled={loading} className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             {loading ? 'Submitting...' : 'Register'}
           </button>
         </form>
