@@ -95,21 +95,30 @@ export const AuthProvider = ({ children }) => {
     return await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/set-password` } })
   }
 
-  const completeSignUp = async (password, userType, bio) => {
-    if (!user) throw new Error('No user session found')
-    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
-    if (authError) throw authError
+  const completeSignUp = async ({ password, userType, bio, name }) => {
+  if (!user) throw new Error('No user session found')
 
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .upsert({ id: user.id, email: user.email, user_type: userType, bio })
-      .select()
-      .single()
-    if (profileError) throw profileError
-    setProfile(profileData)
-    return profileData
-  }
+  // Update user password
+  const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
+  if (authError) throw authError
 
+  // Upsert full profile
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .upsert({
+      id: user.id,
+      email: user.email,
+      user_type: userType,
+      bio,
+      name
+    })
+    .select()
+    .single()
+
+  if (profileError) throw profileError
+  setProfile(profileData)
+  return profileData
+}
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
