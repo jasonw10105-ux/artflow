@@ -1,20 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Plus, Upload, Edit, Trash2, Save, Image as ImageIcon } from 'lucide-react'
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Upload,
+  Save,
+  Image as ImageIcon,
+  X
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ArtworkManagement = () => {
   const { profile } = useAuth()
-  const fileInputRef = useRef(null)
 
   const [mode, setMode] = useState('manage') // 'manage' | 'create'
   const [artworks, setArtworks] = useState([])
   const [pendingArtworks, setPendingArtworks] = useState([])
   const [selectedPending, setSelectedPending] = useState(null)
-  const [formData, setFormData] = useState(initialFormData())
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [formData, setFormData] = useState(initialFormData())
   const [showUploadModal, setShowUploadModal] = useState(false)
 
   function initialFormData() {
@@ -71,18 +78,14 @@ const ArtworkManagement = () => {
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleAddArtworkClick = () => {
-    setShowUploadModal(true)
-  }
-
-  const handleChooseImagesClick = () => {
-    fileInputRef.current?.click()
-  }
-
-  const handleMultipleUpload = async (e) => {
+  const handleFileSelection = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
+    setShowUploadModal(false)
+    await handleMultipleUpload(files)
+  }
 
+  const handleMultipleUpload = async (files) => {
     setUploading(true)
     try {
       const uploads = await Promise.all(
@@ -91,11 +94,30 @@ const ArtworkManagement = () => {
             toast.error(`${file.name} is too large (>5MB)`)
             return null
           }
-          const fileName = `${profile.id}/${Date.now()}-${file.name}`
-          const { error } = await supabase.storage.from('artworks').upload(fileName, file)
-          if (error) throw error
 
-          const { data: { publicUrl } } = supabase.storage.from('artworks').getPublicUrl(fileName)
+          const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+          const fileName = `${profile.id}/${Date.now()}-${safeFileName}`
+
+          const { error: uploadError } = await supabase.storage
+            .from('artworks')
+            .upload(fileName, file)
+
+          if (uploadError) {
+            console.error('Upload error:', uploadError)
+            toast.error(`Upload failed for ${file.name}`)
+            return null
+          }
+
+          const { data: { publicUrl }, error: urlError } = supabase.storage
+            .from('artworks')
+            .getPublicUrl(fileName)
+
+          if (urlError) {
+            console.error('Get URL error:', urlError)
+            toast.error(`Failed to get URL for ${file.name}`)
+            return null
+          }
+
           return { image_url: publicUrl, temp: true }
         })
       )
@@ -104,13 +126,16 @@ const ArtworkManagement = () => {
       if (!validUploads.length) return
 
       setPendingArtworks(prev => [...prev, ...validUploads])
-      setSelectedPending(validUploads[0])
-      setFormData({ ...initialFormData(), image_url: validUploads[0].image_url })
+      if (!selectedPending) {
+        setSelectedPending(validUploads[0])
+        setFormData({ ...initialFormData(), image_url: validUploads[0].image_url })
+      }
+
       setMode('create')
-      setShowUploadModal(false)
       toast.success('Images uploaded. Select each to add details.')
+
     } catch (err) {
-      console.error(err)
+      console.error('Upload failed:', err)
       toast.error('Upload failed')
     } finally {
       setUploading(false)
@@ -142,14 +167,14 @@ const ArtworkManagement = () => {
       if (error) throw error
 
       toast.success('Artwork saved successfully')
-
       setPendingArtworks(prev => prev.filter(p => p.image_url !== selectedPending.image_url))
       setSelectedPending(null)
       setFormData(initialFormData())
       fetchArtworks()
+
     } catch (err) {
       console.error(err)
-      toast.error('Failed to save artwork')
+      toast.error('Failed to save artwork. Check RLS policy.')
     }
   }
 
@@ -192,7 +217,7 @@ const ArtworkManagement = () => {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900">Artwork Management</h1>
             <button
-              onClick={handleAddArtworkClick}
+              onClick={() => setShowUploadModal(true)}
               className="btn-primary flex items-center space-x-2"
             >
               <Plus className="h-5 w-5" />
@@ -200,40 +225,6 @@ const ArtworkManagement = () => {
             </button>
           </div>
 
-          {/* Upload Modal */}
-          {showUploadModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 w-96 space-y-4">
-                <h2 className="text-lg font-semibold">Upload Artwork</h2>
-                <p className="text-sm text-gray-600">Choose images to add to your portfolio.</p>
-                <button
-                  onClick={handleChooseImagesClick}
-                  className="btn-primary flex items-center justify-center space-x-2 w-full"
-                  disabled={uploading}
-                >
-                  <Upload className="h-4 w-4" />
-                  <span>Choose Images</span>
-                </button>
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="btn-secondary w-full"
-                  disabled={uploading}
-                >
-                  Cancel
-                </button>
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  accept="image/*"
-                  ref={fileInputRef}
-                  onChange={handleMultipleUpload}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Artworks grid */}
           {artworks.length === 0 ? (
             <div className="text-center py-12">
               <ImageIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
@@ -291,10 +282,13 @@ const ArtworkManagement = () => {
                 <p className="text-gray-500 text-sm">No pending artworks. Upload some!</p>
               )}
             </div>
-            <label className="btn-primary mt-4 flex items-center justify-center cursor-pointer">
+            <button
+              className="btn-primary mt-4 flex items-center justify-center"
+              onClick={() => setShowUploadModal(true)}
+              disabled={uploading}
+            >
               <Upload className="h-4 w-4 mr-2" /> Add More Works
-              <input type="file" multiple className="hidden" accept="image/*" ref={fileInputRef} onChange={handleMultipleUpload} disabled={uploading} />
-            </label>
+            </button>
             <button
               className="btn-secondary mt-2"
               onClick={() => setMode('manage')}
@@ -314,30 +308,69 @@ const ArtworkManagement = () => {
                     <img src={formData.image_url} className="w-full h-64 object-cover rounded" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Title, Medium, Dimensions, Year, Price, Currency, Editions */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                      <input type="text" name="title" value={formData.title} onChange={handleInputChange} className="input w-full" />
+                      <input
+                        type="text"
+                        name="title"
+                        value={formData.title}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Medium</label>
-                      <input type="text" name="medium" value={formData.medium} onChange={handleInputChange} className="input w-full" placeholder="Oil on canvas, Digital, etc." />
+                      <input
+                        type="text"
+                        name="medium"
+                        value={formData.medium}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        placeholder="Oil on canvas, Digital, etc."
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Dimensions</label>
-                      <input type="text" name="dimensions" value={formData.dimensions} onChange={handleInputChange} className="input w-full" placeholder="24 x 36 inches" />
+                      <input
+                        type="text"
+                        name="dimensions"
+                        value={formData.dimensions}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        placeholder="24 x 36 inches"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Year *</label>
-                      <input type="number" name="year" value={formData.year} onChange={handleInputChange} className="input w-full" min="1900" max={new Date().getFullYear()} />
+                      <input
+                        type="number"
+                        name="year"
+                        value={formData.year}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        min="1900"
+                        max={new Date().getFullYear()}
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-                      <input type="number" name="price" value={formData.price} onChange={handleInputChange} className="input w-full" step="0.01" />
+                      <input
+                        type="number"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        step="0.01"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                      <select name="currency" value={formData.currency} onChange={handleInputChange} className="input w-full">
+                      <select
+                        name="currency"
+                        value={formData.currency}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                      >
                         <option value="USD">USD</option>
                         <option value="EUR">EUR</option>
                         <option value="GBP">GBP</option>
@@ -346,26 +379,57 @@ const ArtworkManagement = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Edition Size</label>
-                      <input type="number" name="edition_size" value={formData.edition_size} onChange={handleInputChange} className="input w-full" min="1" />
+                      <input
+                        type="number"
+                        name="edition_size"
+                        value={formData.edition_size}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        min="1"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Edition Number</label>
-                      <input type="number" name="edition_number" value={formData.edition_number} onChange={handleInputChange} className="input w-full" min="1" />
+                      <input
+                        type="number"
+                        name="edition_number"
+                        value={formData.edition_number}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        min="1"
+                      />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea name="description" value={formData.description} onChange={handleInputChange} className="input w-full" rows="3" placeholder="Describe your artwork..." />
+                    <textarea
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      className="input w-full"
+                      rows="3"
+                      placeholder="Describe your artwork..."
+                    />
                   </div>
 
                   <div className="flex items-center">
-                    <input type="checkbox" name="for_sale" checked={formData.for_sale} onChange={handleInputChange} className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" />
+                    <input
+                      type="checkbox"
+                      name="for_sale"
+                      checked={formData.for_sale}
+                      onChange={handleInputChange}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
                     <label className="ml-2 block text-sm text-gray-700">Available for sale</label>
                   </div>
 
                   <div className="flex justify-end pt-4">
-                    <button type="button" onClick={handleSavePending} className="btn-primary flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={handleSavePending}
+                      className="btn-primary flex items-center space-x-2"
+                    >
                       <Save className="h-4 w-4" />
                       <span>Save Artwork</span>
                     </button>
@@ -377,6 +441,33 @@ const ArtworkManagement = () => {
             )}
           </div>
         </>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded p-6 w-96 relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-900"
+              onClick={() => setShowUploadModal(false)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-lg font-semibold mb-4">Upload Images</h2>
+            <label className="btn-primary flex items-center justify-center cursor-pointer w-full">
+              <Upload className="h-4 w-4 mr-2" /> Choose Images
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                accept="image/*"
+                onChange={handleFileSelection}
+                disabled={uploading}
+              />
+            </label>
+            {uploading && <p className="text-sm mt-2 text-gray-500">Uploading...</p>}
+          </div>
+        </div>
       )}
     </div>
   )
