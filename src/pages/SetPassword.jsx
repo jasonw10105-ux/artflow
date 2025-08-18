@@ -18,11 +18,15 @@ const SetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Only run redirect logic after auth loading is done
   useEffect(() => {
     if (!authLoading) {
-      if (!user) navigate('/register');
-      else if (profile?.password_set) navigate('/dashboard'); // already has password
-      else {
+      if (!user) {
+        navigate('/register'); // no user session
+      } else if (profile?.password_set) {
+        navigate('/dashboard'); // already has password
+      } else {
+        // populate default form values from profile if available
         setFormData((prev) => ({
           ...prev,
           name: profile?.name || '',
@@ -33,9 +37,7 @@ const SetPassword = () => {
     }
   }, [authLoading, user, profile, navigate]);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -55,8 +57,15 @@ const SetPassword = () => {
     }
   };
 
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-12 w-12 border-b-2 border-primary-500 rounded-full"></div></div>;
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin h-12 w-12 border-b-2 border-primary-500 rounded-full"></div>
+      </div>
+    );
+  }
 
+  // Main page (no layout/nav)
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 bg-gray-50">
       <div className="max-w-md w-full space-y-8">
@@ -78,7 +87,12 @@ const SetPassword = () => {
               onChange={handleChange}
               className="input w-full"
             />
-            <select name="userType" value={formData.userType} onChange={handleChange} className="input w-full">
+            <select
+              name="userType"
+              value={formData.userType}
+              onChange={handleChange}
+              className="input w-full"
+            >
               <option value="artist">Artist</option>
               <option value="collector">Collector</option>
             </select>
@@ -93,7 +107,11 @@ const SetPassword = () => {
                 onChange={handleChange}
                 className="input w-full pr-10"
               />
-              <button type="button" className="absolute right-0 top-0 mt-2 mr-2" onClick={() => setShowPassword(!showPassword)}>
+              <button
+                type="button"
+                className="absolute right-0 top-0 mt-2 mr-2"
+                onClick={() => setShowPassword(!showPassword)}
+              >
                 {showPassword ? <EyeOff /> : <Eye />}
               </button>
             </div>
@@ -108,13 +126,21 @@ const SetPassword = () => {
                 onChange={handleChange}
                 className="input w-full pr-10"
               />
-              <button type="button" className="absolute right-0 top-0 mt-2 mr-2" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+              <button
+                type="button"
+                className="absolute right-0 top-0 mt-2 mr-2"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
                 {showConfirmPassword ? <EyeOff /> : <Eye />}
               </button>
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full"
+          >
             {loading ? 'Setting...' : 'Set Password'}
           </button>
         </form>
