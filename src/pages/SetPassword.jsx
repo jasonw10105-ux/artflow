@@ -1,35 +1,34 @@
 import React, { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 
 const SetPassword = () => {
-  const { user } = useAuth()
+  const { user, completeSignUp } = useAuth()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // If user already logged in, skip this page
+  // Redirect if user not in session
   useEffect(() => {
-    if (user) {
-      navigate('/dashboard', { replace: true })
+    if (!user) {
+      toast.error('No active session. Please request a new magic link.')
+      navigate('/register', { replace: true })
     }
   }, [user, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-
-    const { error } = await supabase.auth.updateUser({ password })
-    setLoading(false)
-
-    if (error) {
-      console.error(error.message)
-      toast.error(error.message)
-    } else {
-      toast.success('Password set successfully!')
+    try {
+      await completeSignUp(password)
+      toast.success('Password set! Redirecting...')
       navigate('/dashboard', { replace: true })
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || 'Failed to set password')
+    } finally {
+      setLoading(false)
     }
   }
 
