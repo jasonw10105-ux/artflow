@@ -11,61 +11,59 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!email) {
-      toast.error('Please enter your email')
-      return
-    }
-
     setLoading(true)
+
     try {
+      // Check if email already exists
+      const { data: existingUser } = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/profiles?email=eq.${encodeURIComponent(email)}`,
+        {
+          headers: {
+            apikey: process.env.REACT_APP_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`,
+          },
+        }
+      ).then(res => res.json())
+
+      if (existingUser?.length) {
+        toast.error('Email already registered. Please log in.')
+        navigate('/login')
+        return
+      }
+
+      // Send magic link
       await signUp(email)
-      toast.success('Magic link sent! Check your email to continue.')
-      setEmail('') // clear input
+      toast.success('Check your email for a magic link!')
+      setEmail('')
+
     } catch (error) {
-      toast.error(error.message || 'Failed to send magic link')
+      console.error(error)
+      toast.error(error.message || 'Failed to register')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
-        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
-          Register
-        </h2>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input mt-1"
-                placeholder="you@example.com"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Sending...' : 'Send Magic Link'}
-          </button>
-        </form>
-
-        <p className="mt-4 text-sm text-gray-600 text-center">
-          After clicking the link in your email, you'll be able to set your password and finish your account setup.
-        </p>
-      </div>
+    <div className="min-h-screen flex items-center justify-center">
+      <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-md">
+        <h2 className="text-2xl font-bold text-center">Register</h2>
+        <input
+          type="email"
+          required
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="input w-full"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full btn-primary disabled:opacity-50"
+        >
+          {loading ? 'Sending...' : 'Send Magic Link'}
+        </button>
+      </form>
     </div>
   )
 }
