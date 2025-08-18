@@ -23,9 +23,14 @@ const SetPassword = () => {
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
-        toast.error('No active session. Please request a new magic link.')
-        navigate('/register')
-        return
+        return (
+          <div className="max-w-md mx-auto p-6 text-center">
+            <h2 className="text-xl font-semibold mb-2">No active session</h2>
+            <p className="text-gray-600">
+              Please request a new magic link from the sign-up page.
+            </p>
+          </div>
+        )
       }
       if (profile?.password_set) {
         toast('Password already set. Please login.')
