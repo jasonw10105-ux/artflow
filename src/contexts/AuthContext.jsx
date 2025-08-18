@@ -1,6 +1,7 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+
 const AuthContext = createContext({})
 
 export const useAuth = () => useContext(AuthContext)
@@ -10,88 +11,62 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Initial session load + subscription
   useEffect(() => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user || null)
-      if (session?.user) await fetchProfile(session.user.id)
+      setUser(session?.user ?? null)
       setLoading(false)
     }
-
     getSession()
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_, session) => {
-      setUser(session?.user || null)
-      if (session?.user) await fetchProfile(session.user.id)
-      setLoading(false)
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
     })
 
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  // Fetch profile from 'profiles' table
-  const fetchProfile = async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (error) {
-      console.error('Error fetching profile:', error)
-      setProfile(null)
-    } else {
-      setProfile(data)
-    }
-  }
-
-  // Sign up sends magic link
+  // Magic link signup
   const signUp = async (email) => {
-    const { error } = await supabase.auth.signUp({ email })
-    if (error) throw error
+    return await supabase.auth.signInWithOtp({ email })
   }
 
-  // Sign in with email + password
+  // Normal login with email+password
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
+    setUser(data.user)
     return data.user
   }
 
-  // Check if the user has set a password (after magic link verification)
-  const checkPasswordSet = async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('password_set')
-      .eq('id', userId)
-      .single()
-    if (error) {
-      console.error('Error checking password:', error)
-      return false
-    }
-    return data?.password_set || false
-  }
+  // Complete signup: set password + update profile
+  const completeSignUp = async (password, userType, bio, name) => {
+    // Update auth user with password
+    const { data, error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
 
-  // Complete signup: set password and update profile
-  const completeSignUp = async (password, userType, bio) => {
-    if (!user) throw new Error('No active session')
-    
-    // Update password via Supabase
-    const { error: updatePasswordError } = await supabase.auth.updateUser({ password })
-    if (updatePasswordError) throw updatePasswordError
+    // Update profile in your "profiles" table
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: data.user.id,
+      email: data.user.email,
+      name,
+      bio,
+      user_type: userType,
+      password_set: true,
+      updated_at: new Date(),
+    })
 
-    // Update profiles table
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        user_type: userType,
-        bio,
-        password_set: true
-      })
     if (profileError) throw profileError
 
-    // Refresh local state
-    await fetchProfile(user.id)
+    setProfile({ name, bio, user_type: userType, password_set: true })
+    return data.user
+  }
+
+  const signOut = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setProfile(null)
   }
 
   return (
@@ -102,8 +77,8 @@ export const AuthProvider = ({ children }) => {
         loading,
         signUp,
         signIn,
-        checkPasswordSet,
-        completeSignUp
+        completeSignUp,
+        signOut,
       }}
     >
       {children}
