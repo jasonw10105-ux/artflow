@@ -12,63 +12,39 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-
     try {
-      // Attempt to sign up
       await signUp(email)
-      toast.success(`Magic link sent! Check your email to set up your account.`)
+      toast.success('Check your email for the magic link!')
       setEmail('')
     } catch (error) {
-      console.error('Registration error:', error)
-
-      // Email already exists → redirect to login
-      if (error.message.includes('already exists')) {
-        toast.error('Email already registered. Redirecting to login...')
-        setTimeout(() => navigate('/login'), 2000)
-      } else {
-        toast.error(error.message || 'Registration failed')
-      }
+      console.error(error)
+      toast.error(error.message || 'Signup failed')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
-        <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
-          Create an account
-        </h2>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input mt-1"
-              placeholder="you@example.com"
-            />
-          </div>
-
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="bg-white p-6 rounded-xl shadow-md w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-4">Register</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email"
+            className="w-full border px-3 py-2 rounded-lg"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
           <button
             type="submit"
             disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-black text-white py-2 rounded-lg disabled:opacity-50"
           >
             {loading ? 'Submitting...' : 'Register'}
           </button>
         </form>
-
-        <p className="mt-4 text-sm text-gray-600 text-center">
-          After registering, you will receive a magic link via email to set up your password.
-        </p>
       </div>
     </div>
   )
