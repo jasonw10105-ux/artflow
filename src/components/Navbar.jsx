@@ -41,6 +41,7 @@ const Navbar = () => {
     { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
     { name: 'Artworks', href: '/dashboard/artworks', icon: Image },
     { name: 'Catalogues', href: '/dashboard/catalogues', icon: FolderOpen },
+    { name: 'Contacts', href: '/dashboard/contacts', icon: Settings },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ]
 
