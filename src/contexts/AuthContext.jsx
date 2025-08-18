@@ -18,7 +18,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check magic link
+        // Handle magic link
         const hash = window.location.hash
         if (hash.includes('access_token')) {
           const params = new URLSearchParams(hash.replace('#', ''))
@@ -30,20 +30,15 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
-        // Get current session
+        // Get session
         const { data: { session } } = await supabase.auth.getSession()
         setUser(session?.user ?? null)
 
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id)
-          if (!profileData) {
-            setNeedsPasswordSetup(true)
-          } else {
-            setProfile(profileData)
-            subscribeToProfile(session.user.id)
-          }
-        } else setProfile(null)
-
+          if (!profileData) setNeedsPasswordSetup(true)
+          else setProfile(profileData)
+        }
       } catch (err) {
         console.error('Error initializing auth:', err)
       } finally {
@@ -59,10 +54,7 @@ export const AuthProvider = ({ children }) => {
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id)
           if (!profileData) setNeedsPasswordSetup(true)
-          else {
-            setProfile(profileData)
-            subscribeToProfile(session.user.id)
-          }
+          else setProfile(profileData)
         } else {
           setProfile(null)
           setNeedsPasswordSetup(false)
@@ -71,42 +63,29 @@ export const AuthProvider = ({ children }) => {
       }
     )
 
-    return () => {
-      subscription.unsubscribe()
-      supabase.channel('profiles-changes').unsubscribe()
-    }
+    return () => subscription.unsubscribe()
   }, [])
 
-  const subscribeToProfile = (userId) => {
-    supabase.channel('profiles-changes').unsubscribe()
-    supabase
-      .channel('profiles-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-        async (payload) => {
-          if (payload.eventType === 'DELETE') await signOut()
-          else if (payload.eventType === 'UPDATE') setProfile(payload.new)
-        }
-      )
-      .subscribe()
+  const fetchProfile = async (userId) => {
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (error || !data) return null
+    return data
   }
 
-  const fetchProfile = async (userId) => {
-    try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
-      if (error || !data) return null
-      return data
-    } catch (err) {
-      console.error('Error fetching profile:', err)
-      return null
-    }
+  // Check if user exists with password
+  const checkUserByEmail = async (email) => {
+    const { data, error } = await supabase.auth.admin.listUsers()
+    if (error) throw error
+    const found = data.users.find(u => u.email === email)
+    if (!found) return { exists: false }
+    if (found?.password_hash) return { exists: true, hasPassword: true }
+    return { exists: true, hasPassword: false }
   }
 
   const signUp = async (email) => {
-    // Check if email exists
-    const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).single()
-    if (existing) throw new Error('Email already exists. Please log in.')
+    const check = await checkUserByEmail(email)
+    if (check.exists && check.hasPassword) throw new Error('User already exists, please log in')
+    if (check.exists && !check.hasPassword) return { redirectTo: '/set-password' }
 
     // Send magic link
     const { data, error } = await supabase.auth.signInWithOtp({
@@ -143,17 +122,8 @@ export const AuthProvider = ({ children }) => {
     setUser(null)
     setProfile(null)
     setNeedsPasswordSetup(false)
-    supabase.channel('profiles-changes').unsubscribe()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
-  }
-
-  const updateProfile = async (updates) => {
-    if (!user) throw new Error('No user logged in')
-    const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
-    if (error) throw error
-    setProfile(data)
-    return data
   }
 
   return (
@@ -166,7 +136,6 @@ export const AuthProvider = ({ children }) => {
       completeSignUp,
       signIn,
       signOut,
-      updateProfile,
       fetchProfile
     }}>
       {children}
