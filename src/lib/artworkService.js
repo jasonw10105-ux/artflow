@@ -1,5 +1,5 @@
 // lib/artworkService.js
-import { supabase } from './supabase.js'
+import { supabase } from './supabase.js' 
 
 export async function fetchArtworksByArtist(artistId) {
   const { data, error } = await supabase
