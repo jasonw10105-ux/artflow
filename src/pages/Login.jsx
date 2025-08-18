@@ -5,7 +5,7 @@ import { Eye, EyeOff, Palette } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const Login = () => {
-  const { signIn } = useAuth()
+  const { signIn, needsPasswordSetup } = useAuth()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -21,12 +21,21 @@ const Login = () => {
 
     try {
       await signIn(formData.email, formData.password)
+
+      // If user is verified but has no password → redirect to set-password
+      if (needsPasswordSetup) {
+        toast('Please set your password to continue')
+        navigate('/set-password')
+        return
+      }
+
       toast.success('Welcome back!')
       navigate('/dashboard')
     } catch (error) {
-      // Handle unverified email
-      if (error.message.includes('Email not confirmed')) {
+      if (error.message.includes('User not allowed') || error.message.includes('Email not confirmed')) {
         toast.error('Please verify your email before logging in.')
+      } else if (error.message.includes('Invalid login credentials')) {
+        toast.error('Invalid credentials. Check your email and password.')
       } else {
         toast.error(error.message || 'Failed to sign in')
       }
@@ -77,7 +86,11 @@ const Login = () => {
                   className="input pr-10"
                   placeholder="Enter your password"
                 />
-                <button type="button" className="absolute inset-y-0 right-0 pr-3 flex items-center" onClick={() => setShowPassword(!showPassword)}>
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
                   {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
                 </button>
               </div>
