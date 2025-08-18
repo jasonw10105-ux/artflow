@@ -13,7 +13,6 @@ import PublicCatalogue from './pages/PublicCatalogue'
 import PrivateCatalogue from './pages/PrivateCatalogue'
 import ArtistProfile from './pages/ArtistProfile'
 import Settings from './pages/Settings'
-import ArtistInquiries from './pages/ArtistInquiries' // NEW
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
 
@@ -29,7 +28,7 @@ function App() {
             <Route path="login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="artist/:artistId" element={<ArtistProfile />} />
-            <Route path="view/:artistName/:catalogueName" element={<PublicCatalogue />} /> {/* NEW shareable URL */}
+            <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
             <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
           </Route>
 
@@ -38,7 +37,6 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="artworks" element={<ArtworkManagement />} />
             <Route path="catalogues" element={<CatalogueManagement />} />
-            <Route path="inquiries" element={<ArtistInquiries />} /> {/* NEW */}
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
