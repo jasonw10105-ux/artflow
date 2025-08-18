@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 const Register = () => {
-  const { sendOtp } = useAuth()
+  const { signUp } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -13,18 +13,17 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    try {
-      const { error } = await sendOtp(email)
-      if (error) {
-        toast.error(error.message)
-        return
-      }
 
-      toast.success('Check your email to verify your account via OTP link.')
-      navigate('/verify-otp')  // redirect to verify page
+    try {
+      const { error } = await signUp(email)
+
+      if (error) throw error
+
+      toast.success('Check your email for the OTP link. Then set your password.')
+      navigate('/set-password')
     } catch (err) {
-      console.error(err)
-      toast.error(err.message || 'Failed to register')
+      console.error('Registration error:', err)
+      toast.error(err.message || 'Registration failed')
     } finally {
       setLoading(false)
     }
@@ -34,9 +33,12 @@ const Register = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <h2 className="text-center text-3xl font-bold text-gray-900">Create an account</h2>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              Email address
+            </label>
             <input
               id="email"
               name="email"
@@ -48,6 +50,7 @@ const Register = () => {
               placeholder="you@example.com"
             />
           </div>
+
           <button
             type="submit"
             disabled={loading}
