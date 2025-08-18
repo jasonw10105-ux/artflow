@@ -5,18 +5,14 @@ import { Eye, EyeOff, Palette } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const Login = () => {
-  const { signIn } = useAuth()
+  const { signIn, needsPasswordSetup } = useAuth()
   const navigate = useNavigate()
-
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  })
+  const [formData, setFormData] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
   const handleSubmit = async (e) => {
@@ -25,12 +21,19 @@ const Login = () => {
 
     try {
       await signIn(formData.email, formData.password)
+
+      // If user exists but has no password, redirect to /set-password
+      if (needsPasswordSetup) {
+        toast('Please set your password to continue')
+        navigate('/set-password')
+        return
+      }
+
       toast.success('Welcome back!')
       navigate('/dashboard')
     } catch (error) {
-      console.error('Login error:', error)
       if (error.message.includes('Invalid login credentials')) {
-        toast.error('Incorrect email or password')
+        toast.error('Invalid credentials. If you signed up via magic link, please check your email and set a password.')
       } else {
         toast.error(error.message || 'Failed to sign in')
       }
@@ -46,15 +49,10 @@ const Login = () => {
           <div className="flex justify-center">
             <Palette className="h-12 w-12 text-primary-500" />
           </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Sign in to your account
-          </h2>
+          <h2 className="mt-6 text-3xl font-bold text-gray-900">Sign in to your account</h2>
           <p className="mt-2 text-sm text-gray-600">
             Or{' '}
-            <Link
-              to="/register"
-              className="font-medium text-primary-600 hover:text-primary-500"
-            >
+            <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">
               create a new account
             </Link>
           </p>
@@ -62,11 +60,8 @@ const Login = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
-            {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
               <input
                 id="email"
                 name="email"
@@ -80,11 +75,8 @@ const Login = () => {
               />
             </div>
 
-            {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
               <div className="mt-1 relative">
                 <input
                   id="password"
@@ -102,30 +94,26 @@ const Login = () => {
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400" />
-                  )}
+                  {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
                 </button>
               </div>
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Signing in...
-              </div>
-            ) : (
-              'Sign in'
-            )}
-          </button>
+          <div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Signing in...
+                </div>
+              ) : 'Sign in'}
+            </button>
+          </div>
         </form>
       </div>
     </div>
