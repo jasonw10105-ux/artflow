@@ -19,35 +19,25 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check for magic link in URL
-        const hash = window.location.hash
-        if (hash.includes('access_token')) {
-          const params = new URLSearchParams(hash.replace('#', ''))
-          const access_token = params.get('access_token')
-          if (access_token) {
-            const { data, error } = await supabase.auth.setSession({ access_token })
-            if (error) throw error
-            setUser(data.user)
-            await fetchProfile(data.user.id)
-            subscribeToProfile(data.user.id)
-            setLoading(false)
-            return
-          }
-        }
+        // First check if we are coming from a magic link URL
+        const { data: magicData, error: magicError } = await supabase.auth.getSessionFromUrl({ storeSession: true })
+        if (magicError) console.warn('Magic link session error:', magicError.message)
 
-        // Normal session
+        // If no magic link session, check current session
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) throw error
 
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-          subscribeToProfile(session.user.id)
+        const currentUser = session?.user ?? magicData?.session?.user ?? null
+        setUser(currentUser)
+
+        if (currentUser) {
+          await fetchProfile(currentUser.id)
+          subscribeToProfile(currentUser.id)
         } else {
           setProfile(null)
         }
       } catch (err) {
-        console.error('Error getting session:', err.message)
+        console.error('Error initializing auth:', err.message)
       } finally {
         setLoading(false)
       }
@@ -55,6 +45,7 @@ export const AuthProvider = ({ children }) => {
 
     initAuth()
 
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!session?.user) {
@@ -128,48 +119,29 @@ export const AuthProvider = ({ children }) => {
     return data
   }
 
-  const completeSignUp = async (password, userType, bio, magicToken = null) => {
-  let currentUser = user
+  const completeSignUp = async (password, userType, bio) => {
+    if (!user) throw new Error('No user session found')
 
-  // If there's no active session but a magic token exists, recover the session
-  if (!currentUser && magicToken) {
-    try {
-      const { data: { session }, error } = await supabase.auth.exchangeOtpForSession({
-        otp: magicToken
+    // Update password
+    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
+    if (authError) throw authError
+
+    // Update profile
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        email: user.email,
+        user_type: userType,
+        bio
       })
-      if (error) throw error
-      currentUser = session.user
-      setUser(currentUser)
-    } catch (err) {
-      console.error('Error exchanging magic token:', err.message)
-      throw new Error('Magic link expired or invalid. Please request a new link.')
-    }
+      .select()
+      .single()
+    if (profileError) throw profileError
+
+    setProfile(profileData)
+    return profileData
   }
-
-  if (!currentUser) throw new Error('No user session found')
-
-  // Update password
-  const { data: authData, error: authError } = await supabase.auth.updateUser({
-    password
-  })
-  if (authError) throw authError
-
-  // Update profile
-  const { data: profileData, error: profileError } = await supabase
-    .from('profiles')
-    .upsert({
-      id: currentUser.id,
-      email: currentUser.email,
-      user_type: userType,
-      bio
-    })
-    .select()
-    .single()
-  if (profileError) throw profileError
-
-  setProfile(profileData)
-  return profileData
-}
 
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
