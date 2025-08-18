@@ -1,30 +1,28 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 const Register = () => {
+  const { signUp } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [formData, setFormData] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // Sign up user (magic link / password flow)
-      const { error } = await supabase.auth.signUp({
-        email,
-        options: { emailRedirectTo: `${window.location.origin}/set-password` }
-      })
-
-      if (error) throw error
-
-      toast.success('Check your email to verify and set your password.')
-      navigate('/set-password')
+      await signUp(formData.email, formData.password)
+      toast.success('Verification email sent! Please check your inbox.')
+      navigate('/login')
     } catch (error) {
-      console.error('Registration error:', error)
+      console.error(error)
       toast.error(error.message || 'Registration failed')
     } finally {
       setLoading(false)
@@ -32,27 +30,41 @@ const Register = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full space-y-8">
         <h2 className="mt-6 text-3xl font-bold text-gray-900 text-center">
           Create an account
         </h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input mt-1"
-              placeholder="you@example.com"
-            />
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+              <input
+                type="email"
+                name="email"
+                id="email"
+                required
+                value={formData.email}
+                onChange={handleChange}
+                className="input mt-1"
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+              <input
+                type="password"
+                name="password"
+                id="password"
+                required
+                value={formData.password}
+                onChange={handleChange}
+                className="input mt-1"
+                placeholder="Enter a password"
+              />
+            </div>
           </div>
 
           <button
@@ -60,7 +72,7 @@ const Register = () => {
             disabled={loading}
             className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Submitting...' : 'Register'}
+            {loading ? 'Registering...' : 'Register'}
           </button>
         </form>
       </div>
