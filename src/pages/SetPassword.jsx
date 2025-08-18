@@ -1,10 +1,8 @@
-// src/pages/SetPassword.jsx
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { supabase } from '../lib/supabase'
 
 const SetPassword = () => {
   const { user, completeSignUp, loading: authLoading } = useAuth()
@@ -19,37 +17,13 @@ const SetPassword = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
 
-  // Handle magic link login and set user email
   useEffect(() => {
-    const handleMagicLink = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
-        if (error) {
-          toast.error('Invalid or expired link. Please request a new one.')
-          navigate('/register')
-          return
-        }
-        if (session?.user) {
-          setEmail(session.user.email)
-        } else if (!user) {
-          toast.error('No active session found. Please request a new link.')
-          navigate('/register')
-        } else {
-          setEmail(user.email)
-        }
-      } catch (err) {
-        console.error('Magic link handling error:', err)
-        toast.error('Failed to process magic link.')
-        navigate('/register')
-      }
+    if (!authLoading && !user) {
+      toast.error('No active session found. Please request a new link.')
+      navigate('/register')
     }
-
-    if (!authLoading && !email) {
-      handleMagicLink()
-    }
-  }, [authLoading, user, email, navigate])
+  }, [authLoading, user, navigate])
 
   const handleChange = (e) => {
     setFormData({
@@ -78,13 +52,13 @@ const SetPassword = () => {
       navigate('/dashboard')
     } catch (error) {
       console.error(error)
-      toast.error(error.message || 'Failed to complete account setup')
+      toast.error(error.message || 'Failed to complete setup')
     } finally {
       setLoading(false)
     }
   }
 
-  if (authLoading || !email) {
+  if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
