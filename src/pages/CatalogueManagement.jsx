@@ -66,7 +66,21 @@ const CatalogueManagement = () => {
         .eq('artist_id', profile.id)
         .order('title')
       if (error) throw error
-      setArtworks(data || [])
+
+      // Generate signed URLs for thumbnails if using storage
+      const artworksWithUrls = await Promise.all(
+        data.map(async a => {
+          if (a.thumbnail_path) {
+            const { data: urlData } = supabase
+              .storage.from('works')
+              .getPublicUrl(a.thumbnail_path)
+            return { ...a, thumbnail_url: urlData.publicUrl }
+          }
+          return a
+        })
+      )
+
+      setArtworks(artworksWithUrls)
     } catch (error) {
       console.error('Error fetching artworks:', error)
     }
@@ -79,10 +93,15 @@ const CatalogueManagement = () => {
         .select('*')
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
-      if (error) throw error
+      if (error) {
+        console.warn('Contacts table may not exist yet:', error.message)
+        setContacts([]) // fail gracefully
+        return
+      }
       setContacts(data || [])
     } catch (error) {
       console.error('Error fetching contacts:', error)
+      setContacts([])
     }
   }
 
@@ -261,7 +280,7 @@ const CatalogueManagement = () => {
               <div className="flex space-x-2">
                 <button onClick={() => handleEdit(c)} title="Edit"><Edit className="h-4 w-4 text-gray-400 hover:text-gray-600" /></button>
                 <button onClick={() => handleDelete(c.id)} title="Delete"><Trash2 className="h-4 w-4 text-gray-400 hover:text-red-600" /></button>
-                <button onClick={() => copyShareLink(c)} title="Copy link"><Share2 className="h-4 w-4 text-gray-400 hover:text-blue-600" /></button>
+                <button onClick={() => copyShareLink(c)} title="Copy share link"><Share2 className="h-4 w-4 text-gray-400 hover:text-blue-600" /></button>
               </div>
             </div>
           ))}
@@ -276,7 +295,6 @@ const CatalogueManagement = () => {
               <h2 className="text-xl font-semibold">{editingCatalogue ? 'Edit Catalogue' : 'Create New Catalogue'}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="h-6 w-6" /></button>
             </div>
-
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* Step 1 */}
               {step === 1 && (
@@ -299,7 +317,7 @@ const CatalogueManagement = () => {
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {artworks.map(a => (
                       <div key={a.id} className={`border rounded p-2 cursor-pointer ${formData.artwork_ids.includes(a.id) ? 'border-primary-600' : 'border-gray-300'}`} onClick={() => handleArtworkSelection(a.id)}>
-                        <img src={a.thumbnail_url} alt={a.title} className="w-full h-32 object-cover mb-2 rounded" />
+                        {a.thumbnail_url ? <img src={a.thumbnail_url} alt={a.title} className="w-full h-32 object-cover mb-2 rounded" /> : <div className="w-full h-32 bg-gray-200 mb-2 flex items-center justify-center rounded">No Image</div>}
                         <p className="text-sm text-gray-700">{a.title}</p>
                       </div>
                     ))}
@@ -318,14 +336,20 @@ const CatalogueManagement = () => {
                     <input type="datetime-local" name="scheduled_send" value={formData.scheduled_send} onChange={handleInputChange} className="input w-full mb-4" />
                   )}
 
-                  <p className="mb-2 font-medium">Select Contacts</p>
-                  <div className="flex flex-wrap gap-2">
-                    {contacts.map(c => (
-                      <span key={c.id} className={`px-3 py-1 rounded-full border cursor-pointer ${formData.contact_ids.includes(c.id) ? 'bg-primary-600 text-white' : 'border-gray-300 text-gray-700'}`} onClick={() => handleContactSelection(c.id)}>
-                        {c.name}
-                      </span>
-                    ))}
-                  </div>
+                  {contacts.length > 0 ? (
+                    <>
+                      <p className="mb-2 font-medium">Select Contacts</p>
+                      <div className="flex flex-wrap gap-2">
+                        {contacts.map(c => (
+                          <span key={c.id} className={`px-3 py-1 rounded-full border cursor-pointer ${formData.contact_ids.includes(c.id) ? 'bg-primary-600 text-white' : 'border-gray-300 text-gray-700'}`} onClick={() => handleContactSelection(c.id)}>
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-gray-500">No contacts found. Import contacts first to schedule sends.</p>
+                  )}
                 </div>
               )}
 
