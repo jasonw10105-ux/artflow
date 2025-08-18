@@ -3,35 +3,56 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { parseCSV, deduplicateContacts, syncContactsWithSupabase } from '../lib/contactUtils'
-import { Plus, Trash2, Tag, Share2, X } from 'lucide-react'
+import { Plus, Trash2, Share2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ContactsManagement = () => {
   const { profile } = useAuth()
   const [contacts, setContacts] = useState([])
+  const [artworks, setArtworks] = useState([])
+  const [inquiries, setInquiries] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
   const [selectedFile, setSelectedFile] = useState(null)
   const [selectedContacts, setSelectedContacts] = useState([])
 
   useEffect(() => {
-    if (profile) fetchContacts()
+    if (profile) fetchAllData()
   }, [profile])
 
-  const fetchContacts = async () => {
+  const fetchAllData = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      // Fetch contacts
+      const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('*')
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
+      if (contactsError) throw contactsError
+      setContacts(contactsData || [])
 
-      if (error) throw error
-      setContacts(data || [])
-    } catch (error) {
-      console.error('Error fetching contacts:', error)
-      toast.error('Failed to load contacts')
+      // Fetch artworks
+      const { data: artworksData, error: artworksError } = await supabase
+        .from('artworks')
+        .select('*')
+        .eq('artist_id', profile.id)
+        .order('created_at', { ascending: false })
+      if (artworksError) throw artworksError
+      setArtworks(artworksData || [])
+
+      // Fetch inquiries (nested artwork title)
+      const { data: inquiriesData, error: inquiriesError } = await supabase
+        .from('inquiries')
+        .select('*, artworks(title)')
+        .eq('artist_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      if (inquiriesError) throw inquiriesError
+      setInquiries(inquiriesData || [])
+      
+    } catch (err) {
+      console.error('Error fetching artist data:', err)
+      toast.error('Failed to load data')
     } finally {
       setLoading(false)
     }
@@ -47,7 +68,7 @@ const ContactsManagement = () => {
       const uniqueContacts = deduplicateContacts(contacts, newContacts)
       const syncedContacts = await syncContactsWithSupabase(profile.id, uniqueContacts)
       toast.success(`${syncedContacts.length} contacts added successfully`)
-      fetchContacts()
+      fetchAllData()
     } catch (err) {
       console.error(err)
       toast.error('Failed to import contacts')
@@ -62,7 +83,7 @@ const ContactsManagement = () => {
       const { error } = await supabase.from('contacts').delete().eq('id', contactId)
       if (error) throw error
       toast.success('Contact deleted')
-      fetchContacts()
+      fetchAllData()
     } catch (err) {
       console.error(err)
       toast.error('Failed to delete contact')
