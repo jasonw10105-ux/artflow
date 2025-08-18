@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { artworkSchema } from '../lib/validation'
+import { fetchArtworksByArtist, insertArtwork, deleteArtwork } from '../lib/artworkService'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import {
