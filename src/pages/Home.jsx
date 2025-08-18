@@ -93,12 +93,6 @@ const Home = () => {
               Get Started Free
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
-            <Link
-              to="/login"
-              className="btn-secondary text-lg px-8 py-3"
-            >
-              Sign In
-            </Link>
           </div>
         </div>
       </section>
