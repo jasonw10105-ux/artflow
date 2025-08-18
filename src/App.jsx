@@ -15,6 +15,7 @@ import PublicCatalogue from './pages/PublicCatalogue'
 import PrivateCatalogue from './pages/PrivateCatalogue'
 import ArtistProfile from './pages/ArtistProfile'
 import Settings from './pages/Settings'
+import ContactsManagement from "./pages/ContactsManagement";
 
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
@@ -68,6 +69,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="artworks" element={<ArtworkManagement />} />
           <Route path="catalogues" element={<CatalogueManagement />} />
+          <Route path="/contacts" element={<ContactsManagement />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
