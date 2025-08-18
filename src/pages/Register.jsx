@@ -22,11 +22,11 @@ const Register = () => {
         return
       }
 
-      toast.success('OTP sent! Check your email.')
-      navigate('/verify-otp', { state: { email } })
+      toast.success('Check your email for the OTP link to continue.')
+      navigate('/set-password')
     } catch (err) {
-      console.error(err)
-      toast.error(err.message || 'Failed to send OTP')
+      console.error('Registration error:', err)
+      toast.error(err.message || 'Registration failed')
     } finally {
       setLoading(false)
     }
@@ -35,23 +35,29 @@ const Register = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <h2 className="text-center text-3xl font-bold text-gray-900">Register</h2>
+        <h2 className="text-center text-3xl font-bold text-gray-900">Create an account</h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <input
-            type="email"
-            required
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input w-full"
-          />
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input mt-1"
+              placeholder="you@example.com"
+            />
+          </div>
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full btn-primary"
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Sending OTP...' : 'Send OTP'}
+            {loading ? 'Submitting...' : 'Register'}
           </button>
         </form>
       </div>
