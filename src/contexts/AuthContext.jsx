@@ -128,39 +128,48 @@ export const AuthProvider = ({ children }) => {
     return data
   }
 
-  const completeSignUp = async (password, userType, bio, magicLinkToken) => {
-    let currentUser = user
+  const completeSignUp = async (password, userType, bio, magicToken = null) => {
+  let currentUser = user
 
-    // If no session, set it from magic link token
-    if (!currentUser && magicLinkToken) {
-      const { data, error } = await supabase.auth.setSession({ access_token: magicLinkToken })
-      if (error) throw error
-      currentUser = data.user
-      setUser(currentUser)
-    }
-
-    if (!currentUser) throw new Error('No user session found')
-
-    // Update password
-    const { error: authError } = await supabase.auth.updateUser({ password })
-    if (authError) throw authError
-
-    // Update profile
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: currentUser.id,
-        email: currentUser.email,
-        user_type: userType,
-        bio
+  // If there's no active session but a magic token exists, recover the session
+  if (!currentUser && magicToken) {
+    try {
+      const { data: { session }, error } = await supabase.auth.exchangeOtpForSession({
+        otp: magicToken
       })
-      .select()
-      .single()
-    if (profileError) throw profileError
-
-    setProfile(profileData)
-    return profileData
+      if (error) throw error
+      currentUser = session.user
+      setUser(currentUser)
+    } catch (err) {
+      console.error('Error exchanging magic token:', err.message)
+      throw new Error('Magic link expired or invalid. Please request a new link.')
+    }
   }
+
+  if (!currentUser) throw new Error('No user session found')
+
+  // Update password
+  const { data: authData, error: authError } = await supabase.auth.updateUser({
+    password
+  })
+  if (authError) throw authError
+
+  // Update profile
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .upsert({
+      id: currentUser.id,
+      email: currentUser.email,
+      user_type: userType,
+      bio
+    })
+    .select()
+    .single()
+  if (profileError) throw profileError
+
+  setProfile(profileData)
+  return profileData
+}
 
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
