@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 const Register = () => {
-  const { signUp } = useAuth()
+  const { sendOtp } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,23 +15,18 @@ const Register = () => {
     setLoading(true)
 
     try {
-      const { error } = await signUp(email)
+      const { error } = await sendOtp(email)
 
       if (error) {
-        // If Supabase says user already exists
-        if (error.message.toLowerCase().includes('already registered')) {
-          toast('This email is already registered. Please log in.')
-          navigate('/login')
-          return
-        }
-        throw error
+        toast.error(error.message)
+        return
       }
 
-      toast.success('Check your email to verify. Then set your password.')
-      navigate('/set-password')
+      toast.success('OTP sent! Check your email.')
+      navigate('/verify-otp', { state: { email } })
     } catch (err) {
-      console.error('Registration error:', err)
-      toast.error(err.message || 'Registration failed')
+      console.error(err)
+      toast.error(err.message || 'Failed to send OTP')
     } finally {
       setLoading(false)
     }
@@ -40,31 +35,23 @@ const Register = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <h2 className="text-center text-3xl font-bold text-gray-900">Create an account</h2>
+        <h2 className="text-center text-3xl font-bold text-gray-900">Register</h2>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input mt-1"
-              placeholder="you@example.com"
-            />
-          </div>
-
+          <input
+            type="email"
+            required
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input w-full"
+          />
           <button
             type="submit"
             disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full btn-primary"
           >
-            {loading ? 'Submitting...' : 'Register'}
+            {loading ? 'Sending OTP...' : 'Send OTP'}
           </button>
         </form>
       </div>
