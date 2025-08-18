@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 const Login = () => {
   const { signIn } = useAuth()
   const navigate = useNavigate()
+
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -15,10 +16,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false)
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
   const handleSubmit = async (e) => {
@@ -30,7 +28,12 @@ const Login = () => {
       toast.success('Welcome back!')
       navigate('/dashboard')
     } catch (error) {
-      toast.error(error.message || 'Failed to sign in')
+      console.error('Login error:', error)
+      if (error.message.includes('Invalid login credentials')) {
+        toast.error('Incorrect email or password')
+      } else {
+        toast.error(error.message || 'Failed to sign in')
+      }
     } finally {
       setLoading(false)
     }
@@ -59,6 +62,7 @@ const Login = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
+            {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -76,6 +80,7 @@ const Login = () => {
               />
             </div>
 
+            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
@@ -107,22 +112,20 @@ const Login = () => {
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Signing in...
+              </div>
+            ) : (
+              'Sign in'
+            )}
+          </button>
         </form>
       </div>
     </div>
