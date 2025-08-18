@@ -14,11 +14,11 @@ const Register = () => {
     setLoading(true)
 
     try {
-      await signUp(email) // Supabase sends magic link automatically
+      await signUp(email)
       toast.success('Check your email to verify. Then set your password.')
       navigate('/set-password')
     } catch (error) {
-      console.error('Registration error:', error)
+      console.error(error)
       toast.error(error.message || 'Registration failed')
     } finally {
       setLoading(false)
@@ -45,11 +45,7 @@ const Register = () => {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button type="submit" disabled={loading} className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
             {loading ? 'Submitting...' : 'Register'}
           </button>
         </form>
