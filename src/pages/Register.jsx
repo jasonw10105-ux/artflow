@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
 
 const Register = () => {
   const { signUp } = useAuth()
@@ -14,12 +15,23 @@ const Register = () => {
     setLoading(true)
 
     try {
+      // Check if the user already exists in Supabase Auth
+      const { data: existingUser, error } = await supabase.auth.admin.getUserByEmail(email)
+      if (error && error.message !== 'User not found') throw error
+
+      if (existingUser?.user) {
+        toast('This email is already registered. Please log in or reset your password.')
+        navigate('/login')
+        return
+      }
+
+      // User doesn't exist → send magic link
       await signUp(email)
       toast.success('Check your email to verify. Then set your password.')
       navigate('/set-password')
-    } catch (error) {
-      console.error(error)
-      toast.error(error.message || 'Registration failed')
+    } catch (err) {
+      console.error('Registration error:', err)
+      toast.error(err.message || 'Registration failed')
     } finally {
       setLoading(false)
     }
