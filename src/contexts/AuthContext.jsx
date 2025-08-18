@@ -56,4 +56,85 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       subscription.unsubscribe()
-      if (profileChannel.current) profileCha
+      if (profileChannel.current) profileChannel.current.unsubscribe()
+    }
+  }, [])
+
+  const subscribeToProfile = (userId) => {
+    if (profileChannel.current) profileChannel.current.unsubscribe()
+    profileChannel.current = supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+        async (payload) => {
+          if (payload.eventType === 'DELETE') await signOut()
+          else if (payload.eventType === 'UPDATE') setProfile(payload.new)
+        }
+      )
+      .subscribe()
+  }
+
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+      if (error || !data) {
+        await signOut()
+        return
+      }
+      setProfile(data)
+    } catch (error) {
+      console.error('Error fetching profile:', error)
+      await signOut()
+    }
+  }
+
+  const signUp = async (email) => {
+    const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).single()
+    if (existing) throw new Error('Email already exists. Please log in.')
+    return await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/set-password` } })
+  }
+
+  const completeSignUp = async (password, userType, bio) => {
+    if (!user) throw new Error('No user session found')
+    const { data: authData, error: authError } = await supabase.auth.updateUser({ password })
+    if (authError) throw authError
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .upsert({ id: user.id, email: user.email, user_type: userType, bio })
+      .select()
+      .single()
+    if (profileError) throw profileError
+    setProfile(profileData)
+    return profileData
+  }
+
+  const signIn = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    return data
+  }
+
+  const signOut = async () => {
+    setUser(null)
+    setProfile(null)
+    if (profileChannel.current) profileChannel.current.unsubscribe()
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+  }
+
+  const updateProfile = async (updates) => {
+    if (!user) throw new Error('No user logged in')
+    const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
+    if (error) throw error
+    setProfile(data)
+    return data
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, profile, loading, signUp, completeSignUp, signIn, signOut, updateProfile, fetchProfile }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
