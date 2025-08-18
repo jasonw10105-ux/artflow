@@ -50,25 +50,21 @@ const Dashboard = () => {
 
   const fetchStats = async () => {
     try {
-      // Fetch artworks count
       const { count: artworksCount } = await supabase
         .from('artworks')
         .select('*', { count: 'exact', head: true })
         .eq('artist_id', profile.id)
 
-      // Fetch catalogues count
       const { count: cataloguesCount } = await supabase
         .from('catalogues')
         .select('*', { count: 'exact', head: true })
         .eq('artist_id', profile.id)
 
-      // Fetch inquiries count
       const { count: inquiriesCount } = await supabase
         .from('inquiries')
         .select('*', { count: 'exact', head: true })
         .eq('artist_id', profile.id)
 
-      // Fetch sales data
       const { data: salesData } = await supabase
         .from('sales')
         .select('amount, currency')
@@ -76,8 +72,6 @@ const Dashboard = () => {
 
       const totalSales = salesData?.length || 0
       const totalRevenue = salesData?.reduce((sum, sale) => sum + (sale.amount || 0), 0) || 0
-
-      // Fetch total views (mock data for now)
       const totalViews = Math.floor(Math.random() * 1000) + 100
 
       setStats({
@@ -95,7 +89,6 @@ const Dashboard = () => {
 
   const fetchRecentActivity = async () => {
     try {
-      // Fetch recent inquiries
       const { data: inquiries } = await supabase
         .from('inquiries')
         .select(`
@@ -121,7 +114,6 @@ const Dashboard = () => {
   }
 
   const fetchViewsData = async () => {
-    // Mock data for views chart
     const mockData = [
       { name: 'Mon', views: 24 },
       { name: 'Tue', views: 13 },
@@ -153,34 +145,10 @@ const Dashboard = () => {
   }
 
   const statCards = [
-    {
-      title: 'Total Artworks',
-      value: stats.totalArtworks,
-      icon: Image,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100'
-    },
-    {
-      title: 'Catalogues',
-      value: stats.totalCatalogues,
-      icon: FolderOpen,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100'
-    },
-    {
-      title: 'Profile Views',
-      value: stats.totalViews,
-      icon: Eye,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100'
-    },
-    {
-      title: 'Inquiries',
-      value: stats.totalInquiries,
-      icon: MessageSquare,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100'
-    }
+    { title: 'Total Artworks', value: stats.totalArtworks, icon: Image, color: 'text-blue-600', bgColor: 'bg-blue-100' },
+    { title: 'Catalogues', value: stats.totalCatalogues, icon: FolderOpen, color: 'text-green-600', bgColor: 'bg-green-100' },
+    { title: 'Profile Views', value: stats.totalViews, icon: Eye, color: 'text-purple-600', bgColor: 'bg-purple-100' },
+    { title: 'Inquiries', value: stats.totalInquiries, icon: MessageSquare, color: 'text-orange-600', bgColor: 'bg-orange-100' }
   ]
 
   return (
@@ -202,12 +170,8 @@ const Dashboard = () => {
             <div key={index} className="card p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">
-                    {stat.title}
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {stat.value}
-                  </p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                 </div>
                 <div className={`${stat.bgColor} ${stat.color} p-3 rounded-full`}>
                   <Icon className="h-6 w-6" />
@@ -233,22 +197,14 @@ const Dashboard = () => {
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Line 
-                type="monotone" 
-                dataKey="views" 
-                stroke="#3b82f6" 
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6' }}
-              />
+              <Line type="monotone" dataKey="views" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         {/* Recent Activity */}
         <div className="card p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Recent Activity
-          </h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
           {recentActivity.length > 0 ? (
             <div className="space-y-4">
               {recentActivity.map((activity, index) => (
@@ -257,12 +213,8 @@ const Dashboard = () => {
                     <MessageSquare className="h-4 w-4 text-primary-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">
-                      {activity.message}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {activity.time}
-                    </p>
+                    <p className="text-sm text-gray-900">{activity.message}</p>
+                    <p className="text-xs text-gray-500">{activity.time}</p>
                   </div>
                 </div>
               ))}
@@ -275,10 +227,8 @@ const Dashboard = () => {
 
       {/* Quick Actions */}
       <div className="card p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Quick Actions
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Link
             to="/dashboard/artworks"
             className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -315,6 +265,20 @@ const Dashboard = () => {
             <div>
               <p className="font-medium text-gray-900">View Analytics</p>
               <p className="text-sm text-gray-500">See detailed performance metrics</p>
+            </div>
+          </Link>
+
+          {/* New Public Profile Button */}
+          <Link
+            to={`/artist/${profile.id}`}
+            className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <div className="bg-orange-100 p-2 rounded-lg">
+              <Eye className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900">View Public Profile</p>
+              <p className="text-sm text-gray-500">See your portfolio as collectors see it</p>
             </div>
           </Link>
         </div>
