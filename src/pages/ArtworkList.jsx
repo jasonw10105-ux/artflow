@@ -3,8 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import { Trash2, Edit, Image as ImageIcon } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import UploadArtworkModal from '../lib/UploadArtworkModal'
+import { Link } from 'react-router-dom'
 
 const ArtworkList = () => {
   const { profile } = useAuth()
@@ -29,7 +29,7 @@ const ArtworkList = () => {
       if (error) throw error
       setArtworks(data || [])
     } catch (err) {
-      console.error('Error fetching artworks:', err)
+      console.error(err)
       toast.error('Failed to load artworks')
     } finally {
       setLoading(false)
@@ -58,15 +58,9 @@ const ArtworkList = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Artwork Management</h1>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="btn-primary"
-        >
-          Upload Artwork
-        </button>
+        <button onClick={() => setIsModalOpen(true)} className="btn-primary">Upload Artwork</button>
       </div>
 
       {/* Search & Filter */}
@@ -86,7 +80,6 @@ const ArtworkList = () => {
         </select>
       </div>
 
-      {/* Artworks Grid */}
       {filteredArtworks.length === 0 ? (
         <div className="text-center py-12">
           <ImageIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
@@ -109,7 +102,7 @@ const ArtworkList = () => {
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-900 mb-1">{artwork.title || 'Untitled'}</h3>
                   <p className="text-sm text-gray-600 mb-2">
-                    {artwork.medium || 'Unknown Medium'} • {artwork.year || 'N/A'} • ${artwork.price?.toFixed(2)}
+                    {artwork.medium || 'Unknown Medium'} • {artwork.year || 'N/A'} • ${artwork.price?.toFixed(2) || '0.00'}
                   </p>
 
                   <div className="flex justify-between items-center mt-2">
@@ -121,20 +114,6 @@ const ArtworkList = () => {
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-
-                    {artwork.unique_url && (
-                      <div className="flex space-x-2">
-                        <a href={artwork.unique_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">
-                          Open Link
-                        </a>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(artwork.unique_url) && toast.success('Copied!')}
-                          className="text-sm text-gray-500 underline"
-                        >
-                          Copy Link
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -143,12 +122,7 @@ const ArtworkList = () => {
         </div>
       )}
 
-      {/* Upload Artwork Modal */}
-      <UploadArtworkModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        profile={profile}
-      />
+      <UploadArtworkModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} profile={profile} />
     </div>
   )
 }
