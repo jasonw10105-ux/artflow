@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { 
@@ -12,17 +12,68 @@ import {
   BarChart3,
   FolderOpen,
   Image,
-  Users
+  Users,
+  Bell
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { supabase } from '../supabaseClient'  // import your supabase client
 
 const Navbar = () => {
   const { user, profile, signOut } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [inquiryCount, setInquiryCount] = useState(0)
 
   const isDashboard = location.pathname.startsWith('/dashboard')
+
+  // Fetch unread inquiry count on mount and subscribe to changes
+  useEffect(() => {
+    if (!user) {
+      setInquiryCount(0)
+      return
+    }
+
+    // Function to fetch unread inquiries count
+    const fetchUnreadCount = async () => {
+      const { data, error, count } = await supabase
+        .from('inquiries')
+        .select('*', { count: 'exact' })
+        .eq('user_id', user.id)   // assuming inquiries are linked to user_id
+        .eq('is_read', false)
+
+      if (error) {
+        console.error('Error fetching inquiries count:', error.message)
+        return
+      }
+
+      setInquiryCount(count || 0)
+    }
+
+    fetchUnreadCount()
+
+    // Set up realtime subscription to inquiries table for this user
+    const subscription = supabase
+      .channel('public:inquiries')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inquiries',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          // Re-fetch count on any change for this user's inquiries
+          fetchUnreadCount()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(subscription)
+    }
+  }, [user])
 
   const handleSignOut = async () => {
     try {
@@ -119,15 +170,35 @@ const Navbar = () => {
               )}
             </div>
 
-            {/* Mobile menu button - only show if there are more than 5 items or user menu */}
-            <div className="md:hidden flex items-center">
+            {/* Mobile menu button and inquiry icon */}
+            <div className="md:hidden flex items-center space-x-3">
               {(navItems.length > 5 || user) && (
-                <button
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                </button>
+                <>
+                  {/* Inquiry Icon with badge */}
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false)
+                      navigate('/dashboard/inquiries')
+                    }}
+                    className="relative p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    aria-label="View Inquiries"
+                  >
+                    <Bell className="h-6 w-6" />
+                    {inquiryCount > 0 && (
+                      <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
+                        {inquiryCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Mobile Menu Toggle */}
+                  <button
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                    className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  >
+                    {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -157,7 +228,7 @@ const Navbar = () => {
                   </Link>
                 )
               })}
-              
+
               {user ? (
                 <button
                   onClick={() => {
