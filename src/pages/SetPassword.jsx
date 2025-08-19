@@ -1,225 +1,62 @@
 // src/pages/SetPassword.jsx
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 
 const SetPassword = () => {
-  const { user, profile, loading: authLoading, completeSignUp } = useAuth()
+  const [password, setPassword] = useState('')
   const navigate = useNavigate()
 
-  const [formData, setFormData] = useState({
-    password: '',
-    confirmPassword: '',
-    name: '',
-    bio: '',
-    userType: [], // Array to hold multiple roles
-  })
-
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        toast.error('No active session. Please register or login.')
-        navigate('/register')
-      }
-      if (profile?.password_set) {
-        toast.success('Password already set. Please login.')
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) {
+        // ❌ no session → block access
+        toast.error('Please log in first.')
         navigate('/login')
+        return
+      }
+
+      // 👇 If they already have a password, redirect
+      const { user } = data.session
+      const hasPassword = user.app_metadata?.provider === 'email' && !!user.password
+      if (hasPassword) {
+        navigate('/dashboard')
       }
     }
-  }, [authLoading, user, profile, navigate])
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target
-
-    if (name === 'userType') {
-      setFormData((prev) => {
-        const types = new Set(prev.userType)
-        if (checked) types.add(value)
-        else types.delete(value)
-        return { ...prev, userType: Array.from(types) }
-      })
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }))
-    }
-  }
+    checkSession()
+  }, [navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match')
-      return
-    }
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters')
-      return
-    }
-    if (!formData.name.trim()) {
-      toast.error('Name is required')
-      return
-    }
-    if (!formData.userType.length) {
-      toast.error('Please select at least one account type')
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      toast.error(error.message)
       return
     }
 
-    setLoading(true)
-    try {
-      await completeSignUp(
-        formData.password,
-        formData.userType, // Pass array of roles
-        formData.bio,
-        formData.name
-      )
-      toast.success('Account setup complete!')
-      navigate('/dashboard')
-    } catch (err) {
-      console.error(err)
-      toast.error(err.message || 'Failed to complete setup')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
-      </div>
-    )
+    toast.success('Password set successfully!')
+    navigate('/dashboard')
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8 py-12">
-      <div className="max-w-md w-full space-y-6 bg-white p-8 rounded-xl shadow-lg">
-        <h2 className="text-3xl font-bold text-gray-900 text-center">Set Your Password</h2>
-
-        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          {/* Name */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-              Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="input mt-1"
-              placeholder="Your full name"
-            />
-          </div>
-
-          {/* Bio */}
-          <div>
-            <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
-              Bio
-            </label>
-            <textarea
-              id="bio"
-              name="bio"
-              value={formData.bio}
-              onChange={handleChange}
-              className="input mt-1 resize-none"
-              placeholder="Tell us about yourself (optional)"
-              rows={3}
-            />
-          </div>
-
-          {/* User Type (Checkboxes) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Account Type
-            </label>
-            <div className="flex gap-4 mt-1">
-              <label className="inline-flex items-center">
-                <input
-                  type="checkbox"
-                  name="userType"
-                  value="artist"
-                  checked={formData.userType.includes('artist')}
-                  onChange={handleChange}
-                  className="mr-2"
-                />
-                Artist
-              </label>
-              <label className="inline-flex items-center">
-                <input
-                  type="checkbox"
-                  name="userType"
-                  value="collector"
-                  checked={formData.userType.includes('collector')}
-                  onChange={handleChange}
-                  className="mr-2"
-                />
-                Collector
-              </label>
-            </div>
-          </div>
-
-          {/* Password */}
-          <div className="relative">
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              className="input mt-1 pr-10"
-              placeholder="Enter password"
-            />
-            <span
-              className="absolute right-3 top-10 cursor-pointer"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-            </span>
-          </div>
-
-          {/* Confirm Password */}
-          <div className="relative">
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-              Confirm Password
-            </label>
-            <input
-              type={showConfirmPassword ? 'text' : 'password'}
-              id="confirmPassword"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              className="input mt-1 pr-10"
-              placeholder="Confirm password"
-            />
-            <span
-              className="absolute right-3 top-10 cursor-pointer"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-            </span>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-          >
-            {loading ? 'Setting up...' : 'Set Password'}
-          </button>
-        </form>
-      </div>
+    <div className="flex items-center justify-center h-screen">
+      <form onSubmit={handleSubmit} className="p-6 bg-white rounded shadow-md w-80">
+        <h2 className="text-xl font-semibold mb-4">Set Your Password</h2>
+        <input
+          type="password"
+          placeholder="New password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          className="w-full p-2 border rounded mb-4"
+        />
+        <button type="submit" className="w-full bg-black text-white p-2 rounded">
+          Save Password
+        </button>
+      </form>
     </div>
   )
 }
