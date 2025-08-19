@@ -1,24 +1,24 @@
 import React, { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from './supabase'
 import toast from 'react-hot-toast'
-import { Trash2 } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
-  const navigate = useNavigate()
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState({}) // { filename: percent }
+  const [uploadProgress, setUploadProgress] = useState({})
+  const navigate = useNavigate()
 
   if (!isOpen) return null
 
   const handleFileSelect = (e) => {
-    const selectedFiles = Array.from(e.target.files)
-    setFiles(prev => [...prev, ...selectedFiles])
+    const selected = Array.from(e.target.files)
+    setFiles((prev) => [...prev, ...selected])
   }
 
   const handleRemoveFile = (index) => {
-    setFiles(prev => prev.filter((_, i) => i !== index))
+    setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleUpload = async () => {
@@ -28,63 +28,80 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
+      try {
+        // Upload to Supabase Storage
+        const { error } = await supabase.storage.from('artworks').upload(fileName, file)
+        if (error) throw error
 
-      const { data, error } = await supabase.storage
-        .from('artworks')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
-
-      if (error) {
-        toast.error(`Failed to upload ${file.name}`)
-        console.error(error)
-      } else {
-        const { publicUrl, error: urlError } = supabase.storage
-          .from('artworks')
-          .getPublicUrl(fileName)
-        if (urlError) console.error(urlError)
+        const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
         uploadedUrls.push(publicUrl)
-        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
+
+        // Create pending artwork record
+        const { error: insertError } = await supabase.from('artworks').insert([
+          { artist_id: profile.id, image_url: publicUrl }
+        ])
+        if (insertError) throw insertError
+
+        setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
+      } catch (err) {
+        console.error(err)
+        toast.error(`Failed to upload ${file.name}`)
+        setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }))
       }
     }
 
     setUploading(false)
-    toast.success('Files uploaded!')
+    toast.success('Files uploaded! Pending artworks created.')
+    setFiles([]) // clear local files
+    onClose()
 
-    if (uploadedUrls.length > 0) {
-      navigate('/dashboard/artworks/create', { state: { images: uploadedUrls } })
-      onClose()
-    }
+    // Navigate to create page to allow user to complete pending artworks
+    navigate('/dashboard/artworks/create')
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+      <div className="bg-white p-6 rounded-lg w-full max-w-lg relative">
+        <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-gray-800">
+          <X />
+        </button>
         <h2 className="text-xl font-bold mb-4">Upload Artwork</h2>
         <input type="file" multiple onChange={handleFileSelect} className="mb-4" />
 
         {files.length > 0 && (
-          <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-            {files.map((file, idx) => (
-              <div key={idx} className="flex justify-between items-center bg-gray-100 p-2 rounded">
+          <div className="max-h-64 overflow-y-auto mb-4">
+            {files.map((file, index) => (
+              <div key={index} className="flex justify-between items-center mb-2">
                 <span className="truncate">{file.name}</span>
-                <div className="flex items-center gap-2">
-                  {uploadProgress[file.name] && (
-                    <span className="text-sm text-green-600">{uploadProgress[file.name]}%</span>
-                  )}
-                  <button onClick={() => handleRemoveFile(idx)} className="text-red-500">
-                    <Trash2 size={16} />
+                {uploading && uploadProgress[file.name] != null ? (
+                  <div className="w-32 h-2 bg-gray-200 rounded">
+                    <div
+                      className="h-2 bg-blue-500 rounded"
+                      style={{ width: `${uploadProgress[file.name]}%` }}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleRemoveFile(index)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    Remove
                   </button>
-                </div>
+                )}
               </div>
             ))}
           </div>
         )}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={handleUpload} className="btn-primary" disabled={uploading}>
+          <button onClick={onClose} className="btn-secondary">
+            Cancel
+          </button>
+          <button
+            onClick={handleUpload}
+            disabled={uploading || files.length === 0}
+            className="btn-primary"
+          >
             {uploading ? 'Uploading...' : 'Create'}
           </button>
         </div>
