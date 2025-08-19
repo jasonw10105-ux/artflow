@@ -7,7 +7,6 @@ import {
   Plus,
   ImageIcon,
   BookOpen,
-  EnvelopeOpen,
   Users,
 } from "lucide-react"
 
