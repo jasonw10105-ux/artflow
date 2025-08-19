@@ -21,7 +21,11 @@ const ArtistInquiries = () => {
     try {
       const { data, error } = await supabase
         .from('inquiries')
-        .select(`*, artworks(id, title, image_url), artist:profiles(*)`)
+        .select(`
+          *,
+          artwork:artwork_id(id, title, image_url),
+          artist:artist_id(id, name, public_code)
+        `)
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
 
@@ -81,8 +85,8 @@ const ArtistInquiries = () => {
               {inquiries.map((inq) => (
                 <tr key={inq.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2">{inq.contact_email}</td>
-                  <td className="px-4 py-2">{inq.artworks?.title || '-'}</td>
-                  <td className="px-4 py-2">{inq.message.slice(0, 50)}...</td>
+                  <td className="px-4 py-2">{inq.artwork?.title || '-'}</td>
+                  <td className="px-4 py-2">{inq.message.slice(0, 50)}{inq.message.length > 50 ? '...' : ''}</td>
                   <td className="px-4 py-2">{inq.status}</td>
                   <td className="px-4 py-2">
                     <button
@@ -102,7 +106,7 @@ const ArtistInquiries = () => {
       {modalOpen && selectedInquiry && (
         <Modal onClose={closeModal} title="Inquiry Details">
           <p><strong>Collector Email:</strong> {selectedInquiry.contact_email}</p>
-          <p><strong>Artwork:</strong> {selectedInquiry.artworks?.title || '-'}</p>
+          <p><strong>Artwork:</strong> {selectedInquiry.artwork?.title || '-'}</p>
           <p><strong>Message:</strong> {selectedInquiry.message}</p>
           <p><strong>Status:</strong> {selectedInquiry.status}</p>
         </Modal>
