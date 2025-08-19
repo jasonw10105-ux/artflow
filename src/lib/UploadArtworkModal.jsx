@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
+const UploadArtworkModal = ({ isOpen, onClose, profile, onUploaded }) => {
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({})
@@ -31,25 +31,32 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     if (!files.length) return toast.error('No files selected')
     setUploading(true)
 
-    const uploadedIds = []
+    const newArtworks = []
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
       try {
-        // Upload to Supabase Storage
         const { error } = await supabase.storage.from('artworks').upload(fileName, file)
         if (error) throw error
 
         const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
 
-        // Insert pending artwork and collect ID
-        const { data: insertData, error: insertError } = await supabase
+        // Insert with default title and price
+        const { data: insertedData, error: insertError } = await supabase
           .from('artworks')
-          .insert([{ artist_id: profile.id, image_url: publicUrl, status: 'pending' }])
-          .select()
+          .insert([
+            {
+              artist_id: profile.id,
+              image_url: publicUrl,
+              status: 'pending',
+              title: 'Untitled',
+              price: 0
+            }
+          ])
+          .select('id')
         if (insertError) throw insertError
 
-        uploadedIds.push(insertData[0].id)
+        newArtworks.push(insertedData[0].id)
         setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
       } catch (err) {
         console.error(err)
@@ -63,8 +70,8 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     setFiles([])
     onClose()
 
-    // Navigate to ArtworkCreate with newly uploaded IDs
-    navigate('/dashboard/artworks/create', { state: { newIds: uploadedIds } })
+    if (onUploaded && newArtworks.length) onUploaded(newArtworks)
+    navigate('/dashboard/artworks/create', { state: { newArtworkIds: newArtworks } })
   }
 
   return (
