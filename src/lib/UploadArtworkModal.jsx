@@ -31,39 +31,27 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     if (!files.length) return toast.error('No files selected')
     setUploading(true)
 
-    const uploadedArtworkIds = []
+    const successfulUploads = []
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
       try {
-        // Upload file to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from('artworks')
-          .upload(fileName, file)
+        // Upload to Supabase Storage
+        const { error } = await supabase.storage.from('artworks').upload(fileName, file)
+        if (error) throw error
 
-        if (uploadError) throw uploadError
+        const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
 
-        const { publicUrl } = supabase.storage
-          .from('artworks')
-          .getPublicUrl(fileName)
-
-        // Insert into artworks table with all required fields
-        const { data: inserted, error: insertError } = await supabase
+        // Create pending artwork record with default title
+        const { data, error: insertError } = await supabase
           .from('artworks')
           .insert([
-            {
-              artist_id: profile.id,
-              image_url: publicUrl,
-              title: 'Untitled',
-              price: 0,
-              status: 'pending'
-            }
+            { artist_id: profile.id, image_url: publicUrl, status: 'pending', title: 'Untitled' }
           ])
-          .select('id') // return inserted ID for later use
-
+          .select('id')
         if (insertError) throw insertError
-        uploadedArtworkIds.push(inserted[0].id)
 
+        successfulUploads.push(data[0].id)
         setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
       } catch (err) {
         console.error(err)
@@ -73,12 +61,15 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     }
 
     setUploading(false)
-    toast.success('Files uploaded! Pending artworks created.')
-    setFiles([])
-    onClose()
 
-    // Navigate to create page with uploaded artwork IDs
-    navigate('/dashboard/artworks/create', { state: { uploadedArtworkIds } })
+    if (successfulUploads.length > 0) {
+      toast.success('Files uploaded! Pending artworks created.')
+      setFiles([])
+      onClose()
+      navigate('/dashboard/artworks/create', { state: { uploadedArtworkIds: successfulUploads } })
+    } else {
+      toast.error('No files were uploaded successfully.')
+    }
   }
 
   return (
