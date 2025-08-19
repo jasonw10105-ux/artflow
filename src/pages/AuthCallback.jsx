@@ -18,17 +18,18 @@ const AuthCallback = () => {
         return
       }
 
-      const { user } = data
+      const { user } = data.session
 
-      // Check if user has password set
-      if (user && !user.password) {
-        toast('Please set a password to complete your account setup.')
+      // 👇 Check if user has a password set
+      const hasPassword = user.app_metadata?.provider === 'email' && !!user.password
+
+      if (!hasPassword) {
+        toast('Please set your password')
         navigate('/set-password')
-        return
+      } else {
+        toast.success('Signed in!')
+        navigate('/dashboard')
       }
-
-      toast.success('You are now signed in!')
-      navigate('/dashboard')
     }
 
     handleCallback()
