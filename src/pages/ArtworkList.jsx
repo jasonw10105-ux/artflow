@@ -3,7 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import { Trash2, Edit, Image as ImageIcon } from 'lucide-react'
-import UploadArtworkModal from './UploadArtworkModal' // ensure correct path
+import { Link } from 'react-router-dom'
+import UploadArtworkModal from '../lib/UploadArtworkModal'
 
 const ArtworkList = () => {
   const { profile } = useAuth()
@@ -11,7 +12,7 @@ const ArtworkList = () => {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMedium, setFilterMedium] = useState('')
-  const [isModalOpen, setIsModalOpen] = useState(false) // modal state
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   useEffect(() => {
     if (profile) fetchArtworks()
@@ -57,7 +58,7 @@ const ArtworkList = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header + Upload */}
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Artwork Management</h1>
         <button
@@ -68,15 +69,6 @@ const ArtworkList = () => {
         </button>
       </div>
 
-      {/* Upload Modal */}
-      {isModalOpen && (
-        <UploadArtworkModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          profile={profile}
-        />
-      )}
-
       {/* Search & Filter */}
       <div className="flex gap-4 mb-6">
         <input
@@ -86,11 +78,7 @@ const ArtworkList = () => {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="input"
         />
-        <select
-          value={filterMedium}
-          onChange={(e) => setFilterMedium(e.target.value)}
-          className="input"
-        >
+        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} className="input">
           <option value="">All Mediums</option>
           <option value="Painting">Painting</option>
           <option value="Sculpture">Sculpture</option>
@@ -98,7 +86,7 @@ const ArtworkList = () => {
         </select>
       </div>
 
-      {/* Artwork Grid */}
+      {/* Artworks Grid */}
       {filteredArtworks.length === 0 ? (
         <div className="text-center py-12">
           <ImageIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
@@ -110,13 +98,8 @@ const ArtworkList = () => {
             const isPending = artwork.status === 'pending'
             return (
               <div key={artwork.id} className="card overflow-hidden relative border">
-                <img
-                  src={artwork.image_url}
-                  alt={artwork.title || 'Untitled'}
-                  className="w-full h-48 object-cover"
-                />
+                <img src={artwork.image_url} alt={artwork.title || 'Untitled'} className="w-full h-48 object-cover" />
 
-                {/* Pending badge */}
                 {isPending && (
                   <span className="absolute top-2 left-2 bg-yellow-400 text-black text-xs px-2 py-1 rounded">
                     Pending Details
@@ -131,25 +114,17 @@ const ArtworkList = () => {
 
                   <div className="flex justify-between items-center mt-2">
                     <div className="flex space-x-2">
-                      <a href={`/dashboard/artworks/edit/${artwork.id}`} className="p-2 text-gray-400 hover:text-gray-600">
+                      <Link to={`/dashboard/artworks/edit/${artwork.id}`} className="p-2 text-gray-400 hover:text-gray-600">
                         <Edit className="h-4 w-4" />
-                      </a>
-                      <button
-                        onClick={() => handleDelete(artwork.id)}
-                        className="p-2 text-gray-400 hover:text-red-600"
-                      >
+                      </Link>
+                      <button onClick={() => handleDelete(artwork.id)} className="p-2 text-gray-400 hover:text-red-600">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
 
                     {artwork.unique_url && (
                       <div className="flex space-x-2">
-                        <a
-                          href={artwork.unique_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 text-sm underline"
-                        >
+                        <a href={artwork.unique_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">
                           Open Link
                         </a>
                         <button
@@ -167,6 +142,13 @@ const ArtworkList = () => {
           })}
         </div>
       )}
+
+      {/* Upload Artwork Modal */}
+      <UploadArtworkModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        profile={profile}
+      />
     </div>
   )
 }
