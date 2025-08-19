@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { supabase } from './supabase'
+import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -34,13 +34,11 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
       try {
-        // Upload to Supabase Storage
         const { error } = await supabase.storage.from('artworks').upload(fileName, file)
         if (error) throw error
 
         const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
 
-        // Insert pending artwork
         const { error: insertError } = await supabase.from('artworks').insert([
           { artist_id: profile.id, image_url: publicUrl, status: 'pending' }
         ])
@@ -56,7 +54,7 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
 
     setUploading(false)
     toast.success('Files uploaded! Pending artworks created.')
-    setFiles([]) // clear local files
+    setFiles([])
     onClose()
     navigate('/dashboard/artworks/create')
   }
