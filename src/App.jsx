@@ -31,7 +31,10 @@ function App() {
             <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="set-password" element={<PublicRoute><SetPassword /></PublicRoute>} />
             <Route path="auth/callback" element={<PublicRoute><AuthCallback /></PublicRoute>} />
-            <Route path="artist/:artistId" element={<ArtistProfile />} />
+            
+            {/* Updated artist route */}
+            <Route path="artist/:code/:slug" element={<ArtistProfile />} />
+            
             <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
             <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
           </Route>
