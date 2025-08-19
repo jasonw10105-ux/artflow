@@ -1,89 +1,190 @@
-import React, { useRef, useState, useMemo } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
-const randomToken = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+const randomToken = () =>
+  Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
 
 const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
   const navigate = useNavigate()
-  const inputRef = useRef(null)
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState([]) // [{name, status, publicUrl}]
   const [uploading, setUploading] = useState(false)
   const [inserting, setInserting] = useState(false)
+  const inputRef = useRef(null)
 
   const canClose = !uploading && !inserting
-  const allSucceeded = items.length && items.every(i => i.status === 'success')
-  const totalSuccess = useMemo(() => items.filter(i => i.status === 'success').length, [items])
-  const totalError = useMemo(() => items.filter(i => i.status === 'error').length, [items])
+  const allSucceeded = items.length > 0 && items.every(i => i.status === 'success')
 
   if (!isOpen) return null
-  if (!profile?.id) return <div>You must be signed in to upload.</div>
+  if (!profile?.id) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+        <div className="bg-white p-6 rounded-lg w-full max-w-lg">
+          <p className="text-red-600">You must be signed in to upload.</p>
+          <div className="mt-4 text-right">
+            <button onClick={onClose} className="btn-secondary">Close</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
-  const startUpload = async (file) => {
+  const startUploadForFile = async (file) => {
+    const fileKey = `${profile.id}/${Date.now()}_${file.name}`
     setItems(prev => [...prev, { name: file.name, status: 'uploading', publicUrl: null }])
     setUploading(true)
     try {
-      const key = `${profile.id}/${Date.now()}_${file.name}`
-      const { error } = await supabase.storage.from('artworks').upload(key, file)
-      if (error) throw error
-      const { data } = supabase.storage.from('artworks').getPublicUrl(key)
+      const { error: storageError } = await supabase.storage
+        .from('artworks')
+        .upload(fileKey, file)
+      if (storageError) throw storageError
+
+      const { data } = supabase.storage.from('artworks').getPublicUrl(fileKey)
       const publicUrl = data?.publicUrl
-      if (!publicUrl) throw new Error('No URL')
-      setItems(prev => prev.map(i => i.name === file.name ? { ...i, status: 'success', publicUrl } : i))
+      if (!publicUrl) throw new Error('Failed to get public URL')
+
+      setItems(prev =>
+        prev.map(it =>
+          it.name === file.name ? { ...it, status: 'success', publicUrl } : it
+        )
+      )
     } catch (err) {
-      console.error(err)
-      toast.error(`Upload failed: ${file.name}`)
-      setItems(prev => prev.map(i => i.name === file.name ? { ...i, status: 'error' } : i))
+      console.error('Upload failed:', err)
+      toast.error(`Failed to upload ${file.name}`)
+      setItems(prev =>
+        prev.map(it =>
+          it.name === file.name ? { ...it, status: 'error', publicUrl: null } : it
+        )
+      )
     } finally {
-      setUploading(items.some(i => i.status === 'uploading'))
+      setUploading(prev => items.some(i => i.status === 'uploading'))
+      setTimeout(() => {
+        const anyUploading = items.some(i => i.status === 'uploading')
+        if (!anyUploading) setUploading(false)
+      }, 0)
     }
   }
 
-  const handleFiles = async (e) => {
+  const handleFileSelect = async (e) => {
     const selected = Array.from(e.target.files || [])
-    for (const f of selected) await startUpload(f)
+    if (!selected.length) return
+    const existingNames = new Set(items.map(i => i.name))
+    const toUpload = selected.filter(f => !existingNames.has(f.name))
+    for (const file of toUpload) {
+      await startUploadForFile(file)
+    }
     if (inputRef.current) inputRef.current.value = ''
   }
 
+  const handleRemove = (name) => {
+    if (uploading || inserting) return
+    setItems(prev => prev.filter(i => i.name !== name))
+  }
+
   const handleCreate = async () => {
-    if (!allSucceeded) return
+    if (!allSucceeded || uploading || inserting) return
+
     setInserting(true)
     const batchToken = randomToken()
     sessionStorage.setItem('activeUploadBatch', batchToken)
+
     try {
-      const rows = items.map(i => ({
+      const rows = items.map(it => ({
         artist_id: profile.id,
-        image_url: i.publicUrl,
+        image_url: it.publicUrl,
         status: 'pending',
         title: 'Untitled',
-        for_sale: true,
-        batch_token: batchToken
+        for_sale: true
       }))
-      const { error } = await supabase.from('artworks').insert(rows)
-      if (error) throw error
-      toast.success('Artworks ready! Add details now.')
-      onClose()
+
+      if (rows.some(r => !r.image_url)) {
+        throw new Error('One or more items are missing image URLs.')
+      }
+
+      const { error: insertError, data: inserted } = await supabase
+        .from('artworks')
+        .insert(rows)
+        .select('id')
+
+      if (insertError) throw insertError
+      if (!inserted || inserted.length === 0) throw new Error('Insert returned no rows')
+
+      toast.success('Artworks created. Let’s add details.')
+      onClose?.()
       navigate('/dashboard/artworks/create', { state: { batchToken } })
     } catch (err) {
-      console.error(err)
-      toast.error('Failed to create artworks')
+      console.error('Insert failed:', err)
+      toast.error('Failed to create artwork records. Please try again.')
     } finally {
       setInserting(false)
     }
   }
 
+  const handleSafeClose = () => {
+    if (!canClose) {
+      toast.error('Please wait for uploads to finish.')
+      return
+    }
+    onClose?.()
+  }
+
+  const totalSuccessful = useMemo(() => items.filter(i => i.status === 'success').length, [items])
+  const totalErrors = useMemo(() => items.filter(i => i.status === 'error').length, [items])
+
   return (
     <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
       <div className="bg-white p-6 rounded-lg w-full max-w-lg relative">
-        <button onClick={() => canClose && onClose()} className="absolute top-2 right-2"><X /></button>
-        <h2 className="font-bold mb-4">Upload Artwork</h2>
-        <input type="file" multiple ref={inputRef} onChange={handleFiles} disabled={uploading || inserting} />
-        {items.map(i => <div key={i.name}>{i.name}: {i.status}</div>)}
-        <div className="mt-2 flex justify-end gap-2">
-          <button onClick={() => canClose && onClose()} disabled={!canClose}>Cancel</button>
-          <button onClick={handleCreate} disabled={!allSucceeded || uploading || inserting}>
+        <button
+          onClick={handleSafeClose}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
+          aria-label="Close upload modal"
+        >
+          <X />
+        </button>
+
+        <h2 className="text-xl font-bold mb-4">Upload Artwork</h2>
+
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          onChange={handleFileSelect}
+          className="mb-4"
+          disabled={uploading || inserting}
+        />
+
+        {items.length > 0 && (
+          <div className="max-h-64 overflow-y-auto mb-4 space-y-2">
+            {items.map((it) => (
+              <div key={it.name} className="flex items-center justify-between">
+                <span className="truncate mr-3">{it.name}</span>
+                <div className="flex items-center gap-3">
+                  {it.status === 'uploading' && <span className="text-blue-500 text-sm">Uploading…</span>}
+                  {it.status === 'success' && <span className="text-green-600 text-sm">Ready</span>}
+                  {it.status === 'error' && <span className="text-red-600 text-sm">Error</span>}
+                  <button
+                    onClick={() => handleRemove(it.name)}
+                    disabled={uploading || inserting || it.status === 'uploading'}
+                    className="text-red-500 hover:text-red-700 disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+          <span>Ready: {totalSuccessful}</span>
+          <span>Errors: {totalErrors}</span>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={handleSafeClose} className="btn-secondary" disabled={!canClose}>Cancel</button>
+          <button onClick={handleCreate} disabled={!allSucceeded || uploading || inserting} className="btn-primary">
             {inserting ? 'Creating…' : 'Create'}
           </button>
         </div>
