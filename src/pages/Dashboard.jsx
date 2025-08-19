@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
-import { supabase } from "../supabaseClient"
+import React, { useState, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import { Chart, Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import {
   Plus,
