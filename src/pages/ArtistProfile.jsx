@@ -15,8 +15,17 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+// Slug helper
+const slugify = (name) =>
+  name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/--+/g, '-')
+
 const ArtistProfile = () => {
-  const { artistId } = useParams()
+  const { code, slug } = useParams()
   const { user } = useAuth()
   const [artist, setArtist] = useState(null)
   const [artworks, setArtworks] = useState([])
@@ -28,31 +37,26 @@ const ArtistProfile = () => {
   useEffect(() => {
     fetchArtistData()
     trackProfileView()
-  }, [artistId])
+  }, [code])
 
   const fetchArtistData = async () => {
     try {
-      // Fetch artist profile (supports multi-role)
       const { data: artistData, error: artistError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', artistId)
-        .contains('user_type', ['artist']) // ensure user is an artist
+        .eq('public_code', code)
         .single()
 
       if (artistError) throw artistError
 
-      // Fetch artworks
       const { data: artworksData, error: artworksError } = await supabase
         .from('artworks')
         .select('*')
-        .eq('artist_id', artistId)
+        .eq('artist_id', artistData.id)
         .order('created_at', { ascending: false })
         .limit(12)
-
       if (artworksError) throw artworksError
 
-      // Fetch public catalogues
       const { data: cataloguesData, error: cataloguesError } = await supabase
         .from('catalogues')
         .select(`
@@ -61,13 +65,11 @@ const ArtistProfile = () => {
             artworks(id, image_url, title)
           )
         `)
-        .eq('artist_id', artistId)
+        .eq('artist_id', artistData.id)
         .eq('is_public', true)
         .order('created_at', { ascending: false })
-
       if (cataloguesError) throw cataloguesError
 
-      // Ensure catalogue_artworks is always an array
       const safeCatalogues = (cataloguesData || []).map(cat => ({
         ...cat,
         catalogue_artworks: cat.catalogue_artworks || []
@@ -89,7 +91,7 @@ const ArtistProfile = () => {
       await supabase
         .from('profile_views')
         .insert([{
-          artist_id: artistId,
+          artist_id: artist?.id,
           viewer_ip: 'anonymous',
           viewed_at: new Date().toISOString()
         }])
@@ -100,24 +102,20 @@ const ArtistProfile = () => {
 
   const handleInquirySubmit = async (e) => {
     e.preventDefault()
-    
     if (!user) {
       toast.error('Please sign up or log in to send inquiries')
       return
     }
-
     try {
       const { error } = await supabase
         .from('inquiries')
         .insert([{
-          artist_id: artistId,
+          artist_id: artist.id,
           collector_id: user.id,
           message: inquiryForm.message,
           contact_email: inquiryForm.email || user.email
         }])
-
       if (error) throw error
-
       toast.success('Inquiry sent successfully!')
       setInquiryModal(false)
       setInquiryForm({ email: '', message: '' })
@@ -167,10 +165,7 @@ const ArtistProfile = () => {
             Back to Home
           </Link>
           
-          <button
-            onClick={openInquiryModal}
-            className="btn-primary flex items-center space-x-2"
-          >
+          <button onClick={openInquiryModal} className="btn-primary flex items-center space-x-2">
             <MessageSquare className="h-4 w-4" />
             <span>Contact Artist</span>
           </button>
