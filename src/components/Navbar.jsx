@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import {
   Home,
@@ -16,7 +17,6 @@ import {
   MessageCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { supabase } from '../supabaseClient' // adjust path if needed
 
 const Navbar = () => {
   const { user, profile, signOut } = useAuth()
