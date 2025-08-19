@@ -2,18 +2,24 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
+import { useLocation, useNavigate } from 'react-router-dom'
 
-const ArtworkCreate = ({ uploadedIds }) => {
+const ArtworkCreate = () => {
   const { profile } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const uploadedIds = location.state?.uploadedIds || []
+
   const [pendingArtworks, setPendingArtworks] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (profile && uploadedIds?.length) {
-      fetchPendingArtworks()
-    } else {
-      setLoading(false)
+    if (!uploadedIds.length) {
+      toast.error('No newly uploaded artworks to edit.')
+      navigate('/dashboard/artworks')
+      return
     }
+    if (profile) fetchPendingArtworks()
   }, [profile, uploadedIds])
 
   const fetchPendingArtworks = async () => {
@@ -21,7 +27,7 @@ const ArtworkCreate = ({ uploadedIds }) => {
       const { data, error } = await supabase
         .from('artworks')
         .select('*')
-        .in('id', uploadedIds) // ONLY fetch artworks uploaded in this session
+        .in('id', uploadedIds)
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
 
@@ -30,15 +36,13 @@ const ArtworkCreate = ({ uploadedIds }) => {
     } catch (err) {
       console.error(err)
       toast.error('Failed to load your newly uploaded artworks.')
+      navigate('/dashboard/artworks')
     } finally {
       setLoading(false)
     }
   }
 
   if (loading) return <div className="p-6">Loading your artworks...</div>
-
-  if (!pendingArtworks.length)
-    return <div className="p-6 text-center">No newly uploaded artworks to edit.</div>
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
