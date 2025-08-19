@@ -2,46 +2,41 @@
 import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 const AuthCallback = () => {
   const navigate = useNavigate()
-  const { fetchProfile } = useAuth()
 
   useEffect(() => {
-    const handleAuth = async () => {
-      const { data, error } = await supabase.auth.getSession()
-      if (error || !data.session) {
-        toast.error('Login failed. Please try again.')
+    const handleCallback = async () => {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+
+      if (error) {
+        console.error(error)
+        toast.error('Authentication failed. Please try again.')
         navigate('/login')
         return
       }
 
-      const user = data.session.user
-      await fetchProfile(user.id)
+      const { user } = data
 
-      // If user hasn't set a password yet, send them to set-password
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile?.password_set) {
-        toast('Please complete your account setup.')
+      // Check if user has password set
+      if (user && !user.password) {
+        toast('Please set a password to complete your account setup.')
         navigate('/set-password')
-      } else {
-        navigate('/dashboard')
+        return
       }
+
+      toast.success('You are now signed in!')
+      navigate('/dashboard')
     }
 
-    handleAuth()
-  }, [navigate, fetchProfile])
+    handleCallback()
+  }, [navigate])
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+    <div className="flex items-center justify-center h-screen">
+      <p>Completing sign-in…</p>
     </div>
   )
 }
