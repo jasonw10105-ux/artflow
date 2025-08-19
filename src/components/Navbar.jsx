@@ -1,58 +1,55 @@
-import React, { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { 
-  Home, 
-  User, 
-  Settings, 
-  LogOut, 
-  Menu, 
-  X, 
+import React, { useState } from 'react' import { Link, useLocation, useNavigate } from 'react-router-dom' import { useAuth } from '../contexts/AuthContext'
+import {
+  Home,
+  User,
+  Settings,
+  LogOut,
+  Menu,
+  X,
   Palette,
   BarChart3,
   FolderOpen,
   Image,
   Users,
-  Bell
+  MessageCircle
 } from 'lucide-react'
-import toast from 'react-hot-toast
+import toast from 'react-hot-toast'
+import { supabase } from '../supabaseClient' // adjust path if needed
 
 const Navbar = () => {
   const { user, profile, signOut } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [inquiryCount, setInquiryCount] = useState(0)
+  const [inquiriesCount, setInquiriesCount] = useState(0)
 
   const isDashboard = location.pathname.startsWith('/dashboard')
 
-  // Fetch unread inquiry count on mount and subscribe to changes
+  // Fetch live inquiries count from Supabase
   useEffect(() => {
     if (!user) {
-      setInquiryCount(0)
+      setInquiriesCount(0)
       return
     }
 
-    // Function to fetch unread inquiries count
-    const fetchUnreadCount = async () => {
-      const { data, error, count } = await supabase
+    const fetchInquiriesCount = async () => {
+      const { data, error } = await supabase
         .from('inquiries')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user.id)   // assuming inquiries are linked to user_id
-        .eq('is_read', false)
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'open')
 
       if (error) {
-        console.error('Error fetching inquiries count:', error.message)
+        console.error('Failed to fetch inquiries count:', error)
         return
       }
 
-      setInquiryCount(count || 0)
+      setInquiriesCount(data ?? 0)
     }
 
-    fetchUnreadCount()
+    fetchInquiriesCount()
 
-    // Set up realtime subscription to inquiries table for this user
+    // Real-time subscription to inquiries table for this user and open status
     const subscription = supabase
       .channel('public:inquiries')
       .on(
@@ -61,12 +58,9 @@ const Navbar = () => {
           event: '*',
           schema: 'public',
           table: 'inquiries',
-          filter: `user_id=eq.${user.id}`
+          filter: `user_id=eq.${user.id},status=eq.open`
         },
-        (payload) => {
-          // Re-fetch count on any change for this user's inquiries
-          fetchUnreadCount()
-        }
+        () => fetchInquiriesCount()
       )
       .subscribe()
 
@@ -85,21 +79,20 @@ const Navbar = () => {
     }
   }
 
-  const publicNavItems = [
-    { name: 'Home', href: '/', icon: Home },
-  ]
+  const publicNavItems = [{ name: 'Home', href: '/', icon: Home }]
 
   const dashboardNavItems = [
     { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
     { name: 'Artworks', href: '/dashboard/artworks', icon: Image },
     { name: 'Catalogues', href: '/dashboard/catalogues', icon: FolderOpen },
     { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+    { name: 'Inquiries', href: '/dashboard/inquiries', icon: MessageCircle, showCount: true },
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings }
   ]
 
   const navItems = isDashboard ? dashboardNavItems : publicNavItems
 
-  // Get top 5 items for mobile bottom bar
+  // For mobile bottom bar, show first 5 nav items only
   const mobileBottomItems = navItems.slice(0, 5)
 
   return (
@@ -108,6 +101,7 @@ const Navbar = () => {
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
+            {/* Logo */}
             <div className="flex items-center">
               <Link to="/" className="flex items-center space-x-2">
                 <Palette className="h-8 w-8 text-primary-500" />
@@ -124,23 +118,30 @@ const Navbar = () => {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    className={`relative flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-primary-100 text-primary-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-5 w-5" />
                     <span>{item.name}</span>
+
+                    {/* Badge for inquiries count */}
+                    {item.showCount && inquiriesCount > 0 && (
+                      <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full transform translate-x-2 -translate-y-1">
+                        {inquiriesCount}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
             </div>
 
-            {/* User Menu */}
+            {/* User Menu Desktop */}
             <div className="hidden md:flex items-center space-x-4">
               {user ? (
-                <div className="flex items-center space-x-2">
+                <>
                   <span className="text-sm text-gray-600">
                     Welcome, {profile?.name || user.email}
                   </span>
@@ -151,64 +152,55 @@ const Navbar = () => {
                     <LogOut className="h-4 w-4" />
                     <span>Sign Out</span>
                   </button>
-                </div>
+                </>
               ) : (
-                <div className="flex items-center space-x-2">
+                <>
                   <Link
                     to="/login"
                     className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
                   >
                     Sign In
                   </Link>
-                  <Link
-                    to="/register"
-                    className="btn-primary"
-                  >
+                  <Link to="/register" className="btn-primary">
                     Sign Up
                   </Link>
-                </div>
+                </>
               )}
             </div>
 
-            {/* Mobile menu button and inquiry icon */}
-            <div className="md:hidden flex items-center space-x-3">
-              {(navItems.length > 5 || user) && (
-                <>
-                  {/* Inquiry Icon with badge */}
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false)
-                      navigate('/dashboard/inquiries')
-                    }}
-                    className="relative p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                    aria-label="View Inquiries"
-                  >
-                    <Bell className="h-6 w-6" />
-                    {inquiryCount > 0 && (
-                      <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
-                        {inquiryCount}
-                      </span>
-                    )}
-                  </button>
+            {/* Mobile Menu Button */}
+            <div className="md:hidden flex items-center space-x-2">
+              {isDashboard && user && (
+                <Link
+                  to="/dashboard/inquiries"
+                  className="relative p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  title="Open Inquiries"
+                >
+                  <MessageCircle className="h-6 w-6" />
+                  {inquiriesCount > 0 && (
+                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
+                      {inquiriesCount}
+                    </span>
+                  )}
+                </Link>
+              )}
 
-                  {/* Mobile Menu Toggle */}
-                  <button
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                  >
-                    {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                  </button>
-                </>
+              {(navItems.length > 5 || user) && (
+                <button
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                >
+                  {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* Mobile dropdown menu for overflow items and user actions */}
+        {/* Mobile Dropdown Menu */}
         {isMenuOpen && (
           <div className="md:hidden border-t border-gray-200 bg-white">
             <div className="px-2 pt-2 pb-3 space-y-1">
-              {/* Show overflow items (beyond first 5) */}
               {navItems.slice(5).map((item) => {
                 const Icon = item.icon
                 const isActive = location.pathname === item.href
@@ -225,6 +217,13 @@ const Navbar = () => {
                   >
                     <Icon className="h-5 w-5" />
                     <span>{item.name}</span>
+
+                    {/* Badge for inquiries count */}
+                    {item.showCount && inquiriesCount > 0 && (
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">
+                        {inquiriesCount}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
@@ -275,25 +274,31 @@ const Navbar = () => {
                   key={item.name}
                   to={item.href}
                   className={`flex flex-col items-center justify-center p-2 rounded-lg transition-colors min-w-0 flex-1 ${
-                    isActive
-                      ? 'text-primary-600'
-                      : 'text-gray-500 hover:text-gray-700'
+                    isActive ? 'text-primary-600' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   <Icon className={`h-6 w-6 mb-1 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
-                  <span className={`text-xs font-medium truncate ${
-                    isActive ? 'text-primary-600' : 'text-gray-500'
-                  }`}>
+                  <span
+                    className={`text-xs font-medium truncate ${
+                      isActive ? 'text-primary-600' : 'text-gray-500'
+                    }`}
+                  >
                     {item.name}
                   </span>
+                  {/* Badge for inquiries count in mobile bottom nav */}
+                  {item.showCount && inquiriesCount > 0 && (
+                    <span className="absolute top-1 right-6 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">
+                      {inquiriesCount}
+                    </span>
+                  )}
                 </Link>
               )
             })}
           </div>
         </div>
       )}
-      
-      {/* Bottom padding for mobile to account for bottom nav */}
+
+      {/* Bottom padding for mobile to account for fixed bottom nav */}
       {isDashboard && <div className="md:hidden h-16"></div>}
     </>
   )
