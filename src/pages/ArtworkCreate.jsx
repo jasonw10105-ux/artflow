@@ -83,5 +83,4 @@ const ArtworkCreate = () => {
     </div>
   )
 }
-
 export default ArtworkCreate
