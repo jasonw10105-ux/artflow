@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-const UploadArtworkModal = ({ isOpen, onClose, profile, onUploaded }) => {
+const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({})
@@ -31,32 +31,39 @@ const UploadArtworkModal = ({ isOpen, onClose, profile, onUploaded }) => {
     if (!files.length) return toast.error('No files selected')
     setUploading(true)
 
-    const newArtworks = []
+    const uploadedArtworkIds = []
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
       try {
-        const { error } = await supabase.storage.from('artworks').upload(fileName, file)
-        if (error) throw error
+        // Upload file to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('artworks')
+          .upload(fileName, file)
 
-        const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
+        if (uploadError) throw uploadError
 
-        // Insert with default title and price
-        const { data: insertedData, error: insertError } = await supabase
+        const { publicUrl } = supabase.storage
+          .from('artworks')
+          .getPublicUrl(fileName)
+
+        // Insert into artworks table with all required fields
+        const { data: inserted, error: insertError } = await supabase
           .from('artworks')
           .insert([
             {
               artist_id: profile.id,
               image_url: publicUrl,
-              status: 'pending',
               title: 'Untitled',
-              price: 0
+              price: 0,
+              status: 'pending'
             }
           ])
-          .select('id')
-        if (insertError) throw insertError
+          .select('id') // return inserted ID for later use
 
-        newArtworks.push(insertedData[0].id)
+        if (insertError) throw insertError
+        uploadedArtworkIds.push(inserted[0].id)
+
         setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
       } catch (err) {
         console.error(err)
@@ -70,8 +77,8 @@ const UploadArtworkModal = ({ isOpen, onClose, profile, onUploaded }) => {
     setFiles([])
     onClose()
 
-    if (onUploaded && newArtworks.length) onUploaded(newArtworks)
-    navigate('/dashboard/artworks/create', { state: { newArtworkIds: newArtworks } })
+    // Navigate to create page with uploaded artwork IDs
+    navigate('/dashboard/artworks/create', { state: { uploadedArtworkIds } })
   }
 
   return (
