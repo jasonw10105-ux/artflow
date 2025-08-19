@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
-import { Mail, Send, X, Search, Eye, EyeOff, CheckSquare } from 'lucide-react'
-import { format, isToday, isYesterday } from 'date-fns'
+import { Mail, Send, X, Eye, EyeOff } from 'lucide-react'
+import { isToday, isYesterday } from 'date-fns'
 
 const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -37,14 +37,21 @@ const ArtistInquiries = () => {
         .from('inquiries')
         .select(`
           *,
-          artworks(title)
+          artworks(title),
+          contacts:contacts!contacts_artist_id_fkey(name, email, phone, tags)
         `)
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setInquiries(data)
-      setUnreadIds(new Set(data.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)))
+
+      const mappedData = data.map(i => ({
+        ...i,
+        contacts: i.contacts?.find(c => c.email === i.contact_email) || null
+      }))
+
+      setInquiries(mappedData)
+      setUnreadIds(new Set(mappedData.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)))
     } catch (err) {
       console.error(err)
       toast.error('Failed to load inquiries')
@@ -57,6 +64,7 @@ const ArtistInquiries = () => {
     if (!responseMessage) return toast.error('Please enter a response message')
 
     try {
+      // 1️⃣ Update inquiry
       await supabase
         .from('inquiries')
         .update({
@@ -64,12 +72,31 @@ const ArtistInquiries = () => {
           response_message: responseMessage,
           updated_at: new Date()
         })
-        .in('id', Array.from(selectedIds))
+        .eq('id', inquiry.id)
+
+      // 2️⃣ Auto-add collector as contact if not exists
+      if (inquiry.collector_id) {
+        const { data: existingContact } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('artist_id', profile.id)
+          .eq('email', inquiry.contact_email)
+          .single()
+
+        if (!existingContact) {
+          await supabase.from('contacts').insert({
+            artist_id: profile.id,
+            name: inquiry.contacts?.name || null,
+            email: inquiry.contact_email,
+            phone: inquiry.contacts?.phone || null,
+            tags: ['inquirer']
+          })
+        }
+      }
 
       toast.success('Response sent successfully!')
       setSelectedInquiry(null)
       setResponseMessage('')
-      setSelectedIds(new Set())
       fetchInquiries()
     } catch (err) {
       console.error(err)
@@ -91,14 +118,8 @@ const ArtistInquiries = () => {
     setSelectedIds(updated)
   }
 
-  const selectAll = () => {
-    setSelectedIds(new Set(filteredInquiries.map(i => i.id)))
-  }
-
-  const deselectAll = () => {
-    setSelectedIds(new Set())
-  }
-
+  const selectAll = () => setSelectedIds(new Set(filteredInquiries.map(i => i.id)))
+  const deselectAll = () => setSelectedIds(new Set())
   const bulkMarkReadUnread = (markAsRead) => {
     const updated = new Set(unreadIds)
     selectedIds.forEach(id => {
@@ -107,7 +128,6 @@ const ArtistInquiries = () => {
     })
     setUnreadIds(updated)
   }
-
   const bulkClose = async () => {
     try {
       await supabase
@@ -125,11 +145,9 @@ const ArtistInquiries = () => {
 
   const filteredInquiries = useMemo(() => {
     let data = [...inquiries]
-
     if (filterStatus !== 'All') {
       data = data.filter(i => i.status.toLowerCase() === filterStatus.toLowerCase())
     }
-
     if (searchQuery) {
       data = data.filter(
         i =>
@@ -138,12 +156,10 @@ const ArtistInquiries = () => {
           (i.artworks?.title || '').toLowerCase().includes(searchQuery.toLowerCase())
       )
     }
-
     data.sort((a, b) => {
       const diff = new Date(a.created_at) - new Date(b.created_at)
       return sortOption === 'Newest First' ? -diff : diff
     })
-
     return data
   }, [inquiries, filterStatus, searchQuery, sortOption])
 
@@ -169,7 +185,6 @@ const ArtistInquiries = () => {
             <Mail size={24} /> Inquiries
           </h1>
 
-          {/* Search */}
           <div className="relative mb-4">
             <input
               type="text"
@@ -180,7 +195,6 @@ const ArtistInquiries = () => {
             />
           </div>
 
-          {/* Filters */}
           <div className="flex gap-2 mb-4">
             {FILTER_OPTIONS.map(option => (
               <button
@@ -195,7 +209,6 @@ const ArtistInquiries = () => {
             ))}
           </div>
 
-          {/* Bulk Actions */}
           {selectedIds.size > 0 && (
             <div className="mb-4 flex flex-col gap-2">
               <div className="flex justify-between items-center text-sm text-gray-500">
@@ -228,8 +241,8 @@ const ArtistInquiries = () => {
             </div>
           )}
 
-          {/* Inquiry List */}
-          {filteredInquiries.length === 0 && <p className="text-gray-500">No inquiries found.</p>}
+          {filteredInquiries.length === 0 && <p className="text-gray-500">No inquiries yet.</p>}
+
           <ul className="space-y-2">
             {Object.entries(groupedInquiries).map(([groupName, groupItems]) =>
               groupItems.length > 0 ? (
@@ -253,7 +266,7 @@ const ArtistInquiries = () => {
                         onClick={() => setSelectedInquiry(inquiry)}
                       >
                         <p className="font-medium">{inquiry.artworks?.title || 'Unknown Artwork'}</p>
-                        <p className="text-sm text-gray-500">{inquiry.contact_email}</p>
+                        <p className="text-sm text-gray-500">{inquiry.contacts?.name || inquiry.contact_email}</p>
                         <p className="text-sm mt-1 text-gray-700 line-clamp-2">{inquiry.message}</p>
                       </div>
                       <span
@@ -328,7 +341,7 @@ const ArtistInquiries = () => {
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
-            Select an inquiry to view details
+            No inquiry selected
           </div>
         )}
       </main>
