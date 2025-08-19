@@ -33,10 +33,10 @@ function App() {
             <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="set-password" element={<PublicRoute><SetPassword /></PublicRoute>} />
             <Route path="auth/callback" element={<PublicRoute><AuthCallback /></PublicRoute>} />
-            
+
             {/* Artist profile */}
             <Route path="artist/:code/:slug" element={<ArtistProfile />} />
-            
+
             {/* Public catalogues */}
             <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
             <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
@@ -45,7 +45,7 @@ function App() {
           {/* Protected Routes */}
           <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
-            
+
             {/* Artwork routes */}
             <Route path="artworks" element={<ArtworkList />} />
             <Route path="artworks/create" element={<ArtworkCreate />} />
@@ -53,7 +53,7 @@ function App() {
 
             {/* Catalogue management */}
             <Route path="catalogues" element={<CatalogueManagement />} />
-            
+
             {/* Settings */}
             <Route path="settings" element={<Settings />} />
           </Route>
