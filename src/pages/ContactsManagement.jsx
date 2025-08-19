@@ -1,4 +1,9 @@
-// ...all imports remain the same
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
+import toast from 'react-hot-toast'
+import { Eye, Edit2, Trash2 } from 'lucide-react'
+import Modal from '../components/Modal'
 
 const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   const { profile } = useAuth()
@@ -14,6 +19,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   }, [profile])
 
   const fetchContacts = async () => {
+    if (!profile?.id) return
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -24,7 +30,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
 
       if (error) throw error
       setContacts(data || [])
-      setSelectedContacts([])
+      if (setSelectedContacts) setSelectedContacts([])
     } catch (err) {
       console.error(err)
       toast.error('Failed to fetch contacts')
@@ -52,6 +58,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   }
 
   const saveContact = async () => {
+    if (!selectedContact) return
     try {
       const updated = {
         name: contactForm.name,
@@ -74,7 +81,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   }
 
   const handleDelete = async (contactId) => {
-    if (!confirm('Are you sure?')) return
+    if (!confirm('Are you sure you want to delete this contact?')) return
     try {
       const { error } = await supabase.from('contacts').delete().eq('id', contactId)
       if (error) throw error
@@ -87,6 +94,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   }
 
   const toggleSelect = (contactId) => {
+    if (!setSelectedContacts) return
     setSelectedContacts(prev =>
       prev.includes(contactId)
         ? prev.filter(id => id !== contactId)
@@ -95,6 +103,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   }
 
   const toggleSelectAll = () => {
+    if (!setSelectedContacts) return
     setSelectedContacts(selectedContacts.length === contacts.length ? [] : contacts.map(c => c.id))
   }
 
@@ -160,7 +169,7 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
                     <button onClick={() => openModal(contact, 'edit')} className="text-green-600 hover:underline flex items-center">
                       <Edit2 className="h-4 w-4 mr-1" /> Edit
                     </button>
-                    <button onClick={() => handleDelete(contact.id)} className="text-red-600 hover:underline">
+                    <button onClick={() => handleDelete(contact.id)} className="text-red-600 hover:underline flex items-center">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -175,9 +184,27 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
         <Modal onClose={closeModal} title={modalMode === 'edit' ? 'Edit Contact' : 'Contact Details'}>
           {modalMode === 'edit' ? (
             <div className="space-y-4">
-              <input type="text" value={contactForm.name} onChange={e => setContactForm({...contactForm, name: e.target.value})} className="input w-full" placeholder="Name" />
-              <input type="email" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} className="input w-full" placeholder="Email" />
-              <input type="text" value={contactForm.tags} onChange={e => setContactForm({...contactForm, tags: e.target.value})} className="input w-full" placeholder="Tags (comma-separated)" />
+              <input
+                type="text"
+                value={contactForm.name}
+                onChange={e => setContactForm({...contactForm, name: e.target.value})}
+                className="input w-full"
+                placeholder="Name"
+              />
+              <input
+                type="email"
+                value={contactForm.email}
+                onChange={e => setContactForm({...contactForm, email: e.target.value})}
+                className="input w-full"
+                placeholder="Email"
+              />
+              <input
+                type="text"
+                value={contactForm.tags}
+                onChange={e => setContactForm({...contactForm, tags: e.target.value})}
+                className="input w-full"
+                placeholder="Tags (comma-separated)"
+              />
               <div className="flex justify-end space-x-2">
                 <button onClick={closeModal} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
                 <button onClick={saveContact} className="px-4 py-2 bg-green-600 text-white rounded">Save</button>
