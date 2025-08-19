@@ -27,31 +27,31 @@ const Navbar = () => {
 
   const isDashboard = location.pathname.startsWith('/dashboard')
 
-  // Fetch live inquiries count from Supabase
+  // ---------------- Fetch Live Inquiries Count ----------------
   useEffect(() => {
-    if (!user) {
+    if (!user || !profile) {
       setInquiriesCount(0)
       return
     }
 
     const fetchInquiriesCount = async () => {
-      const { data, error } = await supabase
+      const { count, error } = await supabase
         .from('inquiries')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'open')
+        .select('id', { count: 'exact', head: true })
+        .eq('artist_id', profile.id)
+        .eq('status', 'pending')
 
       if (error) {
         console.error('Failed to fetch inquiries count:', error)
         return
       }
 
-      setInquiriesCount(data ?? 0)
+      setInquiriesCount(count ?? 0)
     }
 
     fetchInquiriesCount()
 
-    // Real-time subscription to inquiries table for this user and open status
+    // Real-time subscription for pending inquiries
     const subscription = supabase
       .channel('public:inquiries')
       .on(
@@ -60,7 +60,7 @@ const Navbar = () => {
           event: '*',
           schema: 'public',
           table: 'inquiries',
-          filter: `user_id=eq.${user.id},status=eq.open`
+          filter: `artist_id=eq.${profile.id},status=eq.pending`
         },
         () => fetchInquiriesCount()
       )
@@ -69,8 +69,9 @@ const Navbar = () => {
     return () => {
       supabase.removeChannel(subscription)
     }
-  }, [user])
+  }, [user, profile])
 
+  // ---------------- Sign Out ----------------
   const handleSignOut = async () => {
     try {
       await signOut()
@@ -93,8 +94,6 @@ const Navbar = () => {
   ]
 
   const navItems = isDashboard ? dashboardNavItems : publicNavItems
-
-  // For mobile bottom bar, show first 5 nav items only
   const mobileBottomItems = navItems.slice(0, 5)
 
   return (
@@ -128,8 +127,6 @@ const Navbar = () => {
                   >
                     <Icon className="h-5 w-5" />
                     <span>{item.name}</span>
-
-                    {/* Badge for inquiries count */}
                     {item.showCount && inquiriesCount > 0 && (
                       <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full transform translate-x-2 -translate-y-1">
                         {inquiriesCount}
@@ -219,8 +216,6 @@ const Navbar = () => {
                   >
                     <Icon className="h-5 w-5" />
                     <span>{item.name}</span>
-
-                    {/* Badge for inquiries count */}
                     {item.showCount && inquiriesCount > 0 && (
                       <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">
                         {inquiriesCount}
@@ -287,7 +282,6 @@ const Navbar = () => {
                   >
                     {item.name}
                   </span>
-                  {/* Badge for inquiries count in mobile bottom nav */}
                   {item.showCount && inquiriesCount > 0 && (
                     <span className="absolute top-1 right-6 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">
                       {inquiriesCount}
