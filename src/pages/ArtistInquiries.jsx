@@ -26,8 +26,9 @@ const ArtistInquiries = () => {
   const [unreadIds, setUnreadIds] = useState(new Set())
   const [selectedIds, setSelectedIds] = useState(new Set())
 
+  // ---------------- Fetch Inquiries ----------------
   useEffect(() => {
-    if (profile) fetchInquiries()
+    if (profile?.id) fetchInquiries()
   }, [profile])
 
   const fetchInquiries = async () => {
@@ -51,7 +52,11 @@ const ArtistInquiries = () => {
       }))
 
       setInquiries(mappedData)
-      setUnreadIds(new Set(mappedData.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)))
+      setUnreadIds(
+        new Set(
+          mappedData.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)
+        )
+      )
     } catch (err) {
       console.error(err)
       toast.error('Failed to load inquiries')
@@ -60,11 +65,11 @@ const ArtistInquiries = () => {
     }
   }
 
+  // ---------------- Respond to Inquiry ----------------
   const respondToInquiry = async (inquiry) => {
     if (!responseMessage) return toast.error('Please enter a response message')
 
     try {
-      // 1️⃣ Update inquiry
       await supabase
         .from('inquiries')
         .update({
@@ -74,7 +79,6 @@ const ArtistInquiries = () => {
         })
         .eq('id', inquiry.id)
 
-      // 2️⃣ Auto-add collector as contact if not exists
       if (inquiry.collector_id) {
         const { data: existingContact } = await supabase
           .from('contacts')
@@ -104,30 +108,28 @@ const ArtistInquiries = () => {
     }
   }
 
+  // ---------------- Toggle Functions ----------------
   const toggleUnread = (id) => {
     const updated = new Set(unreadIds)
-    if (unreadIds.has(id)) updated.delete(id)
-    else updated.add(id)
+    unreadIds.has(id) ? updated.delete(id) : updated.add(id)
     setUnreadIds(updated)
   }
 
   const toggleSelect = (id) => {
     const updated = new Set(selectedIds)
-    if (selectedIds.has(id)) updated.delete(id)
-    else updated.add(id)
+    selectedIds.has(id) ? updated.delete(id) : updated.add(id)
     setSelectedIds(updated)
   }
 
   const selectAll = () => setSelectedIds(new Set(filteredInquiries.map(i => i.id)))
   const deselectAll = () => setSelectedIds(new Set())
+
   const bulkMarkReadUnread = (markAsRead) => {
     const updated = new Set(unreadIds)
-    selectedIds.forEach(id => {
-      if (markAsRead) updated.delete(id)
-      else updated.add(id)
-    })
+    selectedIds.forEach(id => (markAsRead ? updated.delete(id) : updated.add(id)))
     setUnreadIds(updated)
   }
+
   const bulkClose = async () => {
     try {
       await supabase
@@ -143,6 +145,7 @@ const ArtistInquiries = () => {
     }
   }
 
+  // ---------------- Filters and Sorting ----------------
   const filteredInquiries = useMemo(() => {
     let data = [...inquiries]
     if (filterStatus !== 'All') {
@@ -176,6 +179,7 @@ const ArtistInquiries = () => {
 
   if (loading) return <div className="p-6 text-gray-500">Loading inquiries...</div>
 
+  // ---------------- Render ----------------
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Sidebar/List */}
@@ -185,6 +189,7 @@ const ArtistInquiries = () => {
             <Mail size={24} /> Inquiries
           </h1>
 
+          {/* Search */}
           <div className="relative mb-4">
             <input
               type="text"
@@ -195,6 +200,7 @@ const ArtistInquiries = () => {
             />
           </div>
 
+          {/* Filter */}
           <div className="flex gap-2 mb-4">
             {FILTER_OPTIONS.map(option => (
               <button
@@ -209,6 +215,7 @@ const ArtistInquiries = () => {
             ))}
           </div>
 
+          {/* Bulk Actions */}
           {selectedIds.size > 0 && (
             <div className="mb-4 flex flex-col gap-2">
               <div className="flex justify-between items-center text-sm text-gray-500">
@@ -241,8 +248,8 @@ const ArtistInquiries = () => {
             </div>
           )}
 
+          {/* Inquiry List */}
           {filteredInquiries.length === 0 && <p className="text-gray-500">No inquiries yet.</p>}
-
           <ul className="space-y-2">
             {Object.entries(groupedInquiries).map(([groupName, groupItems]) =>
               groupItems.length > 0 ? (
@@ -335,14 +342,12 @@ const ArtistInquiries = () => {
               className="mt-4 text-sm text-indigo-600 hover:underline flex items-center gap-1"
               onClick={() => toggleUnread(selectedInquiry.id)}
             >
-              {unreadIds.has(selectedInquiry.id) ? <EyeOff size={16} /> : <Eye size={16} />}
-              Mark as {unreadIds.has(selectedInquiry.id) ? 'Read' : 'Unread'}
+              {unreadIds.has(selectedInquiry.id) ? <EyeOff size={14} /> : <Eye size={14} />}
+              Mark {unreadIds.has(selectedInquiry.id) ? 'as Read' : 'as Unread'}
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            No inquiry selected
-          </div>
+          <div className="text-gray-400 text-center mt-20">Select an inquiry to view details</div>
         )}
       </main>
     </div>
