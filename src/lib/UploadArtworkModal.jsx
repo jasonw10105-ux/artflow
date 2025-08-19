@@ -31,19 +31,25 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     if (!files.length) return toast.error('No files selected')
     setUploading(true)
 
+    const uploadedIds = []
+
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
       try {
+        // Upload to Supabase Storage
         const { error } = await supabase.storage.from('artworks').upload(fileName, file)
         if (error) throw error
 
         const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
 
-        const { error: insertError } = await supabase.from('artworks').insert([
-          { artist_id: profile.id, image_url: publicUrl, status: 'pending' }
-        ])
+        // Insert pending artwork and collect ID
+        const { data: insertData, error: insertError } = await supabase
+          .from('artworks')
+          .insert([{ artist_id: profile.id, image_url: publicUrl, status: 'pending' }])
+          .select()
         if (insertError) throw insertError
 
+        uploadedIds.push(insertData[0].id)
         setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
       } catch (err) {
         console.error(err)
@@ -56,7 +62,9 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     toast.success('Files uploaded! Pending artworks created.')
     setFiles([])
     onClose()
-    navigate('/dashboard/artworks/create')
+
+    // Navigate to ArtworkCreate with newly uploaded IDs
+    navigate('/dashboard/artworks/create', { state: { newIds: uploadedIds } })
   }
 
   return (
