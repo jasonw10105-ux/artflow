@@ -53,7 +53,18 @@ const ArtistInquiries = () => {
       <h1 className="text-3xl font-bold mb-6">Your Inquiries</h1>
 
       {inquiries.length === 0 ? (
-        <p className="text-gray-500">No inquiries found.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <svg
+            className="w-20 h-20 mb-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h8m-4-4v4m0 8v4m-4-4h8" />
+          </svg>
+          <p className="text-lg">You have no inquiries yet.</p>
+          <p className="text-sm text-gray-500">Once collectors reach out, they’ll appear here.</p>
+        </div>
       ) : (
         <div className="overflow-x-auto border rounded-lg">
           <table className="min-w-full divide-y divide-gray-200">
