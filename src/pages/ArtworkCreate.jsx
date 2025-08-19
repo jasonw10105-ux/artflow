@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import { Save, ArrowLeft, Eye, EyeOff, Trash2 } from 'lucide-react'
-import LoadingSpinner from '../components/LoadingSpinner'
 
 const ArtworkCreate = () => {
   const { profile, user } = useAuth()
@@ -293,7 +292,7 @@ const ArtworkCreate = () => {
   )
 
   if (loading) {
-    return <LoadingSpinner />
+    
   }
 
   if (items.length === 0) {
