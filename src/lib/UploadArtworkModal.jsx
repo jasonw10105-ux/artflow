@@ -30,45 +30,54 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
   const handleUpload = async () => {
     if (!files.length) return toast.error('No files selected')
     setUploading(true)
-    const uploadedIds = []
+    let hasError = false
+    const uploadedArtworks = []
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
       try {
-        // Upload to Supabase Storage
-        const { error } = await supabase.storage.from('artworks').upload(fileName, file)
-        if (error) throw error
-
-        const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
-
-        // Insert artwork with default title
-        const { data, error: insertError } = await supabase
+        // Upload file to Supabase Storage
+        const { error: storageError } = await supabase.storage
           .from('artworks')
-          .insert([{ artist_id: profile.id, image_url: publicUrl, status: 'pending', title: 'Untitled' }])
-          .select('id')
-        if (insertError) throw insertError
+          .upload(fileName, file)
 
-        uploadedIds.push(data[0].id)
+        if (storageError) throw storageError
+
+        const { data: { publicUrl } } = supabase.storage.from('artworks').getPublicUrl(fileName)
+        if (!publicUrl) throw new Error('Failed to get public URL')
+
+        // Insert artwork as pending
+        const { error: insertError, data: insertData } = await supabase
+          .from('artworks')
+          .insert([
+            { artist_id: profile.id, image_url: publicUrl, status: 'pending', title: 'Untitled' }
+          ])
+          .select('id')  // only select id for confirmation
+
+        if (insertError) throw insertError
+        uploadedArtworks.push(insertData[0].id)
+
         setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
       } catch (err) {
         console.error(err)
         toast.error(`Failed to upload ${file.name}`)
         setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }))
+        hasError = true
       }
     }
 
     setUploading(false)
 
-    if (uploadedIds.length) {
-      toast.success('Files uploaded! Pending artworks created.')
+    if (!hasError) {
+      toast.success('All files uploaded successfully!')
       setFiles([])
       onClose()
       // Navigate to create page with only newly uploaded artworks
-      navigate('/dashboard/artworks/create', { state: { uploadedIds } })
-    } else {
-      toast.error('No files were uploaded.')
+      navigate('/dashboard/artworks/create', { state: { uploadedIds: uploadedArtworks } })
     }
   }
+
+  const allUploadsReady = files.length > 0 && files.every(file => uploadProgress[file.name] === 100)
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -77,6 +86,7 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
           <X />
         </button>
         <h2 className="text-xl font-bold mb-4">Upload Artwork</h2>
+
         <input type="file" multiple onChange={handleFileSelect} className="mb-4" />
 
         {files.length > 0 && (
@@ -108,7 +118,7 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
           <button onClick={onClose} className="btn-secondary">Cancel</button>
           <button
             onClick={handleUpload}
-            disabled={uploading || files.length === 0}
+            disabled={!allUploadsReady || uploading}
             className="btn-primary"
           >
             {uploading ? 'Uploading...' : 'Create'}
