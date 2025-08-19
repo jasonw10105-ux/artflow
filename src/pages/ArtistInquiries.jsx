@@ -38,28 +38,31 @@ const ArtistInquiries = () => {
         .from('inquiries')
         .select(`
           *,
-          artworks(title),
-          contacts:contacts!contacts_artist_id_fkey(name, email, phone, tags)
+          artworks:title,
+          collector:collector_id(id, name, email)
         `)
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
 
-      const mappedData = data.map(i => ({
+      const safeData = Array.isArray(data) ? data : []
+
+      const mappedData = safeData.map(i => ({
         ...i,
-        contacts: i.contacts?.find(c => c.email === i.contact_email) || null
+        artworks: i.artworks || { title: 'Unknown Artwork' },
+        collector: i.collector || { name: i.contact_email || 'Unknown', email: i.contact_email || 'unknown@example.com' },
+        message: i.message || '',
+        status: i.status || 'pending',
+        contact_email: i.contact_email || 'unknown@example.com'
       }))
 
       setInquiries(mappedData)
-      setUnreadIds(
-        new Set(
-          mappedData.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)
-        )
-      )
+      setUnreadIds(new Set(mappedData.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)))
     } catch (err) {
-      console.error(err)
+      console.error('Error fetching inquiries:', err)
       toast.error('Failed to load inquiries')
+      setInquiries([])
     } finally {
       setLoading(false)
     }
@@ -67,8 +70,7 @@ const ArtistInquiries = () => {
 
   // ---------------- Respond to Inquiry ----------------
   const respondToInquiry = async (inquiry) => {
-    if (!responseMessage) return toast.error('Please enter a response message')
-
+    if (!responseMessage.trim()) return toast.error('Please enter a response message')
     try {
       await supabase
         .from('inquiries')
@@ -80,21 +82,26 @@ const ArtistInquiries = () => {
         .eq('id', inquiry.id)
 
       if (inquiry.collector_id) {
-        const { data: existingContact } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('artist_id', profile.id)
-          .eq('email', inquiry.contact_email)
-          .single()
+        try {
+          const { data: existingContact, error: contactError } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('artist_id', profile.id)
+            .eq('email', inquiry.contact_email)
+            .single()
 
-        if (!existingContact) {
-          await supabase.from('contacts').insert({
-            artist_id: profile.id,
-            name: inquiry.contacts?.name || null,
-            email: inquiry.contact_email,
-            phone: inquiry.contacts?.phone || null,
-            tags: ['inquirer']
-          })
+          if (contactError && contactError.code !== 'PGRST116') throw contactError
+
+          if (!existingContact) {
+            await supabase.from('contacts').insert({
+              artist_id: profile.id,
+              name: inquiry.collector?.name || null,
+              email: inquiry.contact_email,
+              tags: ['inquirer']
+            })
+          }
+        } catch (contactErr) {
+          console.error('Error ensuring contact exists:', contactErr)
         }
       }
 
@@ -103,34 +110,41 @@ const ArtistInquiries = () => {
       setResponseMessage('')
       fetchInquiries()
     } catch (err) {
-      console.error(err)
+      console.error('Error responding to inquiry:', err)
       toast.error('Failed to send response')
     }
   }
 
   // ---------------- Toggle Functions ----------------
   const toggleUnread = (id) => {
-    const updated = new Set(unreadIds)
-    unreadIds.has(id) ? updated.delete(id) : updated.add(id)
-    setUnreadIds(updated)
+    setUnreadIds(prev => {
+      const updated = new Set(prev)
+      updated.has(id) ? updated.delete(id) : updated.add(id)
+      return updated
+    })
   }
 
   const toggleSelect = (id) => {
-    const updated = new Set(selectedIds)
-    selectedIds.has(id) ? updated.delete(id) : updated.add(id)
-    setSelectedIds(updated)
+    setSelectedIds(prev => {
+      const updated = new Set(prev)
+      updated.has(id) ? updated.delete(id) : updated.add(id)
+      return updated
+    })
   }
 
   const selectAll = () => setSelectedIds(new Set(filteredInquiries.map(i => i.id)))
   const deselectAll = () => setSelectedIds(new Set())
 
   const bulkMarkReadUnread = (markAsRead) => {
-    const updated = new Set(unreadIds)
-    selectedIds.forEach(id => (markAsRead ? updated.delete(id) : updated.add(id)))
-    setUnreadIds(updated)
+    setUnreadIds(prev => {
+      const updated = new Set(prev)
+      selectedIds.forEach(id => (markAsRead ? updated.delete(id) : updated.add(id)))
+      return updated
+    })
   }
 
   const bulkClose = async () => {
+    if (selectedIds.size === 0) return
     try {
       await supabase
         .from('inquiries')
@@ -140,46 +154,54 @@ const ArtistInquiries = () => {
       setSelectedIds(new Set())
       fetchInquiries()
     } catch (err) {
-      console.error(err)
+      console.error('Error closing inquiries:', err)
       toast.error('Failed to close inquiries')
     }
   }
 
   // ---------------- Filters and Sorting ----------------
   const filteredInquiries = useMemo(() => {
-    let data = [...inquiries]
-    if (filterStatus !== 'All') {
-      data = data.filter(i => i.status.toLowerCase() === filterStatus.toLowerCase())
+    try {
+      let data = [...inquiries]
+      if (filterStatus !== 'All') {
+        data = data.filter(i => (i.status || '').toLowerCase() === filterStatus.toLowerCase())
+      }
+      if (searchQuery) {
+        data = data.filter(
+          i =>
+            (i.contact_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (i.message || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (i.artworks?.title || '').toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      }
+      data.sort((a, b) => {
+        const diff = new Date(a.created_at || Date.now()) - new Date(b.created_at || Date.now())
+        return sortOption === 'Newest First' ? -diff : diff
+      })
+      return data
+    } catch (err) {
+      console.error('Error filtering inquiries:', err)
+      return []
     }
-    if (searchQuery) {
-      data = data.filter(
-        i =>
-          i.contact_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          i.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (i.artworks?.title || '').toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-    data.sort((a, b) => {
-      const diff = new Date(a.created_at) - new Date(b.created_at)
-      return sortOption === 'Newest First' ? -diff : diff
-    })
-    return data
   }, [inquiries, filterStatus, searchQuery, sortOption])
 
   const groupedInquiries = useMemo(() => {
     const groups = { Today: [], Yesterday: [], Earlier: [] }
     filteredInquiries.forEach(i => {
-      const date = new Date(i.created_at)
-      if (isToday(date)) groups.Today.push(i)
-      else if (isYesterday(date)) groups.Yesterday.push(i)
-      else groups.Earlier.push(i)
+      try {
+        const date = new Date(i.created_at || Date.now())
+        if (isToday(date)) groups.Today.push(i)
+        else if (isYesterday(date)) groups.Yesterday.push(i)
+        else groups.Earlier.push(i)
+      } catch (err) {
+        console.error('Error grouping inquiry:', err)
+      }
     })
     return groups
   }, [filteredInquiries])
 
   if (loading) return <div className="p-6 text-gray-500">Loading inquiries...</div>
 
-  // ---------------- Render ----------------
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Sidebar/List */}
@@ -221,8 +243,12 @@ const ArtistInquiries = () => {
               <div className="flex justify-between items-center text-sm text-gray-500">
                 <span>{selectedIds.size} selected</span>
                 <div className="flex gap-2">
-                  <button onClick={selectAll} className="px-2 py-1 bg-gray-200 rounded text-sm">Select All</button>
-                  <button onClick={deselectAll} className="px-2 py-1 bg-gray-200 rounded text-sm">Deselect All</button>
+                  <button onClick={selectAll} className="px-2 py-1 bg-gray-200 rounded text-sm">
+                    Select All
+                  </button>
+                  <button onClick={deselectAll} className="px-2 py-1 bg-gray-200 rounded text-sm">
+                    Deselect All
+                  </button>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -249,7 +275,7 @@ const ArtistInquiries = () => {
           )}
 
           {/* Inquiry List */}
-          {filteredInquiries.length === 0 && <p className="text-gray-500">No inquiries yet.</p>}
+          {filteredInquiries.length === 0 && <p className="text-gray-500">No inquiries found.</p>}
           <ul className="space-y-2">
             {Object.entries(groupedInquiries).map(([groupName, groupItems]) =>
               groupItems.length > 0 ? (
@@ -273,15 +299,15 @@ const ArtistInquiries = () => {
                         onClick={() => setSelectedInquiry(inquiry)}
                       >
                         <p className="font-medium">{inquiry.artworks?.title || 'Unknown Artwork'}</p>
-                        <p className="text-sm text-gray-500">{inquiry.contacts?.name || inquiry.contact_email}</p>
+                        <p className="text-sm text-gray-500">{inquiry.collector?.name || inquiry.contact_email}</p>
                         <p className="text-sm mt-1 text-gray-700 line-clamp-2">{inquiry.message}</p>
                       </div>
                       <span
                         className={`ml-2 px-2 py-1 text-xs font-semibold rounded-full ${
-                          STATUS_COLORS[inquiry.status]
+                          STATUS_COLORS[inquiry.status] || 'bg-gray-100 text-gray-800'
                         }`}
                       >
-                        {inquiry.status}
+                        {inquiry.status || 'pending'}
                       </span>
                       {unreadIds.has(inquiry.id) && (
                         <Eye className="absolute top-2 right-2 text-indigo-500" size={16} />
