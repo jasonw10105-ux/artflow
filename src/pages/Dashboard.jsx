@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 function Dashboard() {
+  const { profile } = useAuth()
   const [artworks, setArtworks] = useState([])
   const [catalogues, setCatalogues] = useState([])
   const [inquiries, setInquiries] = useState([])
@@ -55,7 +56,7 @@ function Dashboard() {
     fetchData()
   }, [])
 
-  // Example simple chart data from artworks count over days (you can customize)
+  // Chart data
   const chartData = artworks
     .reduce((acc, artwork) => {
       const date = new Date(artwork.created_at).toLocaleDateString()
@@ -68,7 +69,17 @@ function Dashboard() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        {profile && (
+          <Link
+            to={`/artist/${profile.id}`}
+            className="text-blue-600 underline"
+          >
+            View Public Profile
+          </Link>
+        )}
+      </div>
 
       {error && (
         <div className="mb-4 p-4 bg-red-100 text-red-700 rounded">
