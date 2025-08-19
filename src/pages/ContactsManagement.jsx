@@ -1,9 +1,4 @@
-import React, { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../lib/supabase'
-import toast from 'react-hot-toast'
-import { Trash2, Edit2, Eye } from 'lucide-react'
-import Modal from '../components/Modal'
+// ...all imports remain the same
 
 const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   const { profile } = useAuth()
@@ -109,8 +104,20 @@ const ContactsManagement = ({ selectedContacts, setSelectedContacts }) => {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Contacts</h1>
+
       {contacts.length === 0 ? (
-        <p className="text-gray-500">No contacts found.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <svg
+            className="w-20 h-20 mb-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <p className="text-lg">You have no contacts yet.</p>
+          <p className="text-sm text-gray-500">Add a contact to start building your network.</p>
+        </div>
       ) : (
         <div className="overflow-x-auto border rounded-lg">
           <table className="min-w-full divide-y divide-gray-200">
