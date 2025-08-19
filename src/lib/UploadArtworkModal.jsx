@@ -29,9 +29,8 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
 
   const handleUpload = async () => {
     if (!files.length) return toast.error('No files selected')
-
     setUploading(true)
-    const uploadedIds = []
+    let successCount = 0
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
@@ -41,23 +40,13 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
 
         const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
 
-        // INSERT with default title = 'Untitled'
-        const { data, error: insertError } = await supabase
-          .from('artworks')
-          .insert([
-            {
-              artist_id: profile.id,
-              image_url: publicUrl,
-              status: 'pending',
-              title: 'Untitled', // prevents NOT NULL violation
-            },
-          ])
-          .select('id')
-
+        const { error: insertError } = await supabase.from('artworks').insert([
+          { artist_id: profile.id, image_url: publicUrl, title: 'Untitled', status: 'pending' }
+        ])
         if (insertError) throw insertError
-        uploadedIds.push(data[0].id)
 
         setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
+        successCount++
       } catch (err) {
         console.error(err)
         toast.error(`Failed to upload ${file.name}`)
@@ -66,17 +55,14 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     }
 
     setUploading(false)
+    setFiles([])
 
-    if (uploadedIds.length) {
-      toast.success('Files uploaded! Pending artworks created.')
-      setFiles([])
-      onClose()
-
-      // Navigate only if at least one artwork uploaded
-      navigate('/dashboard/artworks/create', { state: { uploadedIds } })
-    } else {
-      toast.error('No artworks were uploaded successfully.')
+    if (successCount > 0) {
+      toast.success(`${successCount} file(s) uploaded successfully!`)
+      navigate('/dashboard/artworks/create')
     }
+
+    onClose()
   }
 
   return (
@@ -95,10 +81,7 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
                 <span className="truncate">{file.name}</span>
                 {uploading && uploadProgress[file.name] != null ? (
                   <div className="w-32 h-2 bg-gray-200 rounded">
-                    <div
-                      className="h-2 bg-blue-500 rounded"
-                      style={{ width: `${uploadProgress[file.name]}%` }}
-                    />
+                    <div className="h-2 bg-blue-500 rounded" style={{ width: `${uploadProgress[file.name]}%` }} />
                   </div>
                 ) : (
                   <button
@@ -115,11 +98,7 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button
-            onClick={handleUpload}
-            disabled={uploading || files.length === 0}
-            className="btn-primary"
-          >
+          <button onClick={handleUpload} disabled={uploading || files.length === 0} className="btn-primary">
             {uploading ? 'Uploading...' : 'Create'}
           </button>
         </div>
