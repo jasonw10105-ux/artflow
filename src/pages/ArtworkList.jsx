@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Trash2, Edit, Image as ImageIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
+import { Trash2, Edit, Image as ImageIcon } from 'lucide-react'
+import UploadArtworkModal from '../lib/UploadArtworkModal'  // <-- updated path
 
 const ArtworkList = () => {
   const { profile } = useAuth()
@@ -11,6 +12,7 @@ const ArtworkList = () => {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMedium, setFilterMedium] = useState('')
+  const [isModalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
     if (profile) fetchArtworks()
@@ -57,7 +59,9 @@ const ArtworkList = () => {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Artwork Management</h1>
-        <Link to="/dashboard/artworks/create" className="btn-primary">Upload Artwork</Link>
+        <button onClick={() => setModalOpen(true)} className="btn-primary">
+          Upload Artwork
+        </button>
       </div>
 
       {/* Search & Filter */}
@@ -111,6 +115,13 @@ const ArtworkList = () => {
           ))}
         </div>
       )}
+
+      {/* Upload Artwork Modal */}
+      <UploadArtworkModal
+        isOpen={isModalOpen}
+        onClose={() => setModalOpen(false)}
+        profile={profile}
+      />
     </div>
   )
 }
