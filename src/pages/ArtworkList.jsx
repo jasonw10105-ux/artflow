@@ -23,6 +23,7 @@ const ArtworkList = () => {
         .select('*')
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
+
       if (error) throw error
       setArtworks(data || [])
     } catch (err) {
@@ -46,12 +47,12 @@ const ArtworkList = () => {
     }
   }
 
-  const filteredArtworks = artworks.filter(a =>
-    a.title?.toLowerCase().includes(searchQuery.toLowerCase() || '') &&
+  const filteredArtworks = artworks.filter((a) =>
+    a.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
     (filterMedium ? a.medium === filterMedium : true)
   )
 
-  if (loading) return <div className="p-6">Loading...</div>
+  if (loading) return <div className="p-6">Loading artworks...</div>
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -66,10 +67,10 @@ const ArtworkList = () => {
           type="text"
           placeholder="Search by title..."
           value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
+          onChange={(e) => setSearchQuery(e.target.value)}
           className="input"
         />
-        <select value={filterMedium} onChange={e => setFilterMedium(e.target.value)} className="input">
+        <select value={filterMedium} onChange={(e) => setFilterMedium(e.target.value)} className="input">
           <option value="">All Mediums</option>
           <option value="Painting">Painting</option>
           <option value="Sculpture">Sculpture</option>
@@ -85,11 +86,11 @@ const ArtworkList = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredArtworks.map((artwork) => {
-            const isPending = !artwork.title || (!artwork.price && !artwork.price_negotiable)
+            const isPending = artwork.status === 'pending'
             return (
               <div key={artwork.id} className="card overflow-hidden relative border">
-                <img src={artwork.image_url} alt={artwork.title || 'Pending Artwork'} className="w-full h-48 object-cover" />
-                
+                <img src={artwork.image_url} alt={artwork.title || 'Untitled'} className="w-full h-48 object-cover" />
+
                 {/* Pending badge */}
                 {isPending && (
                   <span className="absolute top-2 left-2 bg-yellow-400 text-black text-xs px-2 py-1 rounded">
@@ -99,8 +100,10 @@ const ArtworkList = () => {
 
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-900 mb-1">{artwork.title || 'Untitled'}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{artwork.medium || 'Unknown Medium'} • {artwork.year || 'N/A'}</p>
-                  
+                  <p className="text-sm text-gray-600 mb-2">
+                    {artwork.medium || 'Unknown Medium'} • {artwork.year || 'N/A'} • ${artwork.price?.toFixed(2)}
+                  </p>
+
                   <div className="flex justify-between items-center mt-2">
                     <div className="flex space-x-2">
                       <Link to={`/dashboard/artworks/edit/${artwork.id}`} className="p-2 text-gray-400 hover:text-gray-600">
@@ -113,8 +116,15 @@ const ArtworkList = () => {
 
                     {artwork.unique_url && (
                       <div className="flex space-x-2">
-                        <a href={artwork.unique_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">Open Link</a>
-                        <button onClick={() => navigator.clipboard.writeText(artwork.unique_url) && toast.success('Copied!')} className="text-sm text-gray-500 underline">Copy Link</button>
+                        <a href={artwork.unique_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">
+                          Open Link
+                        </a>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(artwork.unique_url) && toast.success('Copied!')}
+                          className="text-sm text-gray-500 underline"
+                        >
+                          Copy Link
+                        </button>
                       </div>
                     )}
                   </div>
