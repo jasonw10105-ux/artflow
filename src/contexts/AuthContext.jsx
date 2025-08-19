@@ -31,7 +31,10 @@ export const AuthProvider = ({ children }) => {
   }
 
   const registerWithEmail = async (email) => {
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
+    })
     if (error) throw error
   }
 
@@ -51,7 +54,10 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = async (email, password) => {
     if (!password) {
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
+      })
       if (error) throw error
       throw new Error('No password set. Check your email to complete registration.')
     }
@@ -62,7 +68,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, registerWithEmail, completeSignUp, signIn,fetchProfile, }}>
+    <AuthContext.Provider value={{ user, profile, loading, registerWithEmail, completeSignUp, signIn, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   )
