@@ -103,7 +103,7 @@ function Dashboard() {
 
             <div className="stat-card flex items-center space-x-4">
               <div className="stat-icon bg-green-500 text-white">
-                <EnvelopeOpen size={24} />
+                <BookOpen size={24} />
               </div>
               <div>
                 <p className="stat-title">Inquiries</p>
