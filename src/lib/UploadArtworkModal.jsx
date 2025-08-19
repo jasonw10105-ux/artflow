@@ -18,13 +18,18 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
   }
 
   const handleRemoveFile = (index) => {
+    const removedFile = files[index]
     setFiles((prev) => prev.filter((_, i) => i !== index))
+    setUploadProgress((prev) => {
+      const updated = { ...prev }
+      delete updated[removedFile.name]
+      return updated
+    })
   }
 
   const handleUpload = async () => {
     if (!files.length) return toast.error('No files selected')
     setUploading(true)
-    const uploadedUrls = []
 
     for (const file of files) {
       const fileName = `${profile.id}/${Date.now()}_${file.name}`
@@ -34,11 +39,10 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
         if (error) throw error
 
         const { publicUrl } = supabase.storage.from('artworks').getPublicUrl(fileName)
-        uploadedUrls.push(publicUrl)
 
-        // Create pending artwork record
+        // Insert pending artwork
         const { error: insertError } = await supabase.from('artworks').insert([
-          { artist_id: profile.id, image_url: publicUrl }
+          { artist_id: profile.id, image_url: publicUrl, status: 'pending' }
         ])
         if (insertError) throw insertError
 
@@ -54,8 +58,6 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
     toast.success('Files uploaded! Pending artworks created.')
     setFiles([]) // clear local files
     onClose()
-
-    // Navigate to create page to allow user to complete pending artworks
     navigate('/dashboard/artworks/create')
   }
 
@@ -94,9 +96,7 @@ const UploadArtworkModal = ({ isOpen, onClose, profile }) => {
         )}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn-secondary">
-            Cancel
-          </button>
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
           <button
             onClick={handleUpload}
             disabled={uploading || files.length === 0}
