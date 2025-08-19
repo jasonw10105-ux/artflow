@@ -15,6 +15,7 @@ import ArtistProfile from './pages/ArtistProfile'
 import Settings from './pages/Settings'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
+import AuthCallback from './pages/AuthCallback'
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="set-password" element={<PublicRoute><SetPassword /></PublicRoute>} />
+            <Route path="auth/callback" element={<PublicRoute><AuthCallback /></PublicRoute>} />
             <Route path="artist/:artistId" element={<ArtistProfile />} />
             <Route path="catalogue/:catalogueId" element={<PublicCatalogue />} />
             <Route path="private-catalogue/:catalogueId" element={<PrivateCatalogue />} />
