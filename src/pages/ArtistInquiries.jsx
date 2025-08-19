@@ -1,32 +1,17 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
-import { Mail, Send, X, Eye, EyeOff } from 'lucide-react'
-import { isToday, isYesterday } from 'date-fns'
-
-const STATUS_COLORS = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  responded: 'bg-green-100 text-green-800',
-  closed: 'bg-gray-100 text-gray-800'
-}
-
-const FILTER_OPTIONS = ['All', 'Pending', 'Responded', 'Closed']
-const SORT_OPTIONS = ['Newest First', 'Oldest First']
+import { Eye } from 'lucide-react'
+import Modal from '../components/Modal'
 
 const ArtistInquiries = () => {
   const { profile } = useAuth()
   const [inquiries, setInquiries] = useState([])
   const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
   const [selectedInquiry, setSelectedInquiry] = useState(null)
-  const [responseMessage, setResponseMessage] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterStatus, setFilterStatus] = useState('All')
-  const [sortOption, setSortOption] = useState('Newest First')
-  const [unreadIds, setUnreadIds] = useState(new Set())
-  const [selectedIds, setSelectedIds] = useState(new Set())
 
-  // ---------------- Fetch Inquiries ----------------
   useEffect(() => {
     if (profile?.id) fetchInquiries()
   }, [profile])
@@ -36,346 +21,81 @@ const ArtistInquiries = () => {
     try {
       const { data, error } = await supabase
         .from('inquiries')
-        .select(`
-          *,
-          artworks:title,
-          collector:collector_id(id, name, email)
-        `)
+        .select(`*, artworks(id, title, image_url), artist:profiles(*)`)
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-
-      const safeData = Array.isArray(data) ? data : []
-
-      const mappedData = safeData.map(i => ({
-        ...i,
-        artworks: i.artworks || { title: 'Unknown Artwork' },
-        collector: i.collector || { name: i.contact_email || 'Unknown', email: i.contact_email || 'unknown@example.com' },
-        message: i.message || '',
-        status: i.status || 'pending',
-        contact_email: i.contact_email || 'unknown@example.com'
-      }))
-
-      setInquiries(mappedData)
-      setUnreadIds(new Set(mappedData.filter(i => i.status === 'pending' && !i.response_message).map(i => i.id)))
+      setInquiries(data || [])
     } catch (err) {
-      console.error('Error fetching inquiries:', err)
-      toast.error('Failed to load inquiries')
-      setInquiries([])
+      console.error(err)
+      toast.error('Failed to fetch inquiries')
     } finally {
       setLoading(false)
     }
   }
 
-  // ---------------- Respond to Inquiry ----------------
-  const respondToInquiry = async (inquiry) => {
-    if (!responseMessage.trim()) return toast.error('Please enter a response message')
-    try {
-      await supabase
-        .from('inquiries')
-        .update({
-          status: 'responded',
-          response_message: responseMessage,
-          updated_at: new Date()
-        })
-        .eq('id', inquiry.id)
-
-      if (inquiry.collector_id) {
-        try {
-          const { data: existingContact, error: contactError } = await supabase
-            .from('contacts')
-            .select('id')
-            .eq('artist_id', profile.id)
-            .eq('email', inquiry.contact_email)
-            .single()
-
-          if (contactError && contactError.code !== 'PGRST116') throw contactError
-
-          if (!existingContact) {
-            await supabase.from('contacts').insert({
-              artist_id: profile.id,
-              name: inquiry.collector?.name || null,
-              email: inquiry.contact_email,
-              tags: ['inquirer']
-            })
-          }
-        } catch (contactErr) {
-          console.error('Error ensuring contact exists:', contactErr)
-        }
-      }
-
-      toast.success('Response sent successfully!')
-      setSelectedInquiry(null)
-      setResponseMessage('')
-      fetchInquiries()
-    } catch (err) {
-      console.error('Error responding to inquiry:', err)
-      toast.error('Failed to send response')
-    }
+  const openModal = (inquiry) => {
+    setSelectedInquiry(inquiry)
+    setModalOpen(true)
   }
 
-  // ---------------- Toggle Functions ----------------
-  const toggleUnread = (id) => {
-    setUnreadIds(prev => {
-      const updated = new Set(prev)
-      updated.has(id) ? updated.delete(id) : updated.add(id)
-      return updated
-    })
+  const closeModal = () => {
+    setSelectedInquiry(null)
+    setModalOpen(false)
   }
 
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const updated = new Set(prev)
-      updated.has(id) ? updated.delete(id) : updated.add(id)
-      return updated
-    })
-  }
-
-  const selectAll = () => setSelectedIds(new Set(filteredInquiries.map(i => i.id)))
-  const deselectAll = () => setSelectedIds(new Set())
-
-  const bulkMarkReadUnread = (markAsRead) => {
-    setUnreadIds(prev => {
-      const updated = new Set(prev)
-      selectedIds.forEach(id => (markAsRead ? updated.delete(id) : updated.add(id)))
-      return updated
-    })
-  }
-
-  const bulkClose = async () => {
-    if (selectedIds.size === 0) return
-    try {
-      await supabase
-        .from('inquiries')
-        .update({ status: 'closed', updated_at: new Date() })
-        .in('id', Array.from(selectedIds))
-      toast.success('Inquiries closed')
-      setSelectedIds(new Set())
-      fetchInquiries()
-    } catch (err) {
-      console.error('Error closing inquiries:', err)
-      toast.error('Failed to close inquiries')
-    }
-  }
-
-  // ---------------- Filters and Sorting ----------------
-  const filteredInquiries = useMemo(() => {
-    try {
-      let data = [...inquiries]
-      if (filterStatus !== 'All') {
-        data = data.filter(i => (i.status || '').toLowerCase() === filterStatus.toLowerCase())
-      }
-      if (searchQuery) {
-        data = data.filter(
-          i =>
-            (i.contact_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (i.message || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (i.artworks?.title || '').toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      }
-      data.sort((a, b) => {
-        const diff = new Date(a.created_at || Date.now()) - new Date(b.created_at || Date.now())
-        return sortOption === 'Newest First' ? -diff : diff
-      })
-      return data
-    } catch (err) {
-      console.error('Error filtering inquiries:', err)
-      return []
-    }
-  }, [inquiries, filterStatus, searchQuery, sortOption])
-
-  const groupedInquiries = useMemo(() => {
-    const groups = { Today: [], Yesterday: [], Earlier: [] }
-    filteredInquiries.forEach(i => {
-      try {
-        const date = new Date(i.created_at || Date.now())
-        if (isToday(date)) groups.Today.push(i)
-        else if (isYesterday(date)) groups.Yesterday.push(i)
-        else groups.Earlier.push(i)
-      } catch (err) {
-        console.error('Error grouping inquiry:', err)
-      }
-    })
-    return groups
-  }, [filteredInquiries])
-
+  if (!profile) return <div className="p-6 text-gray-500">Loading profile...</div>
   if (loading) return <div className="p-6 text-gray-500">Loading inquiries...</div>
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Sidebar/List */}
-      <aside className="w-96 border-r border-gray-200 overflow-y-auto flex flex-col">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
-            <Mail size={24} /> Inquiries
-          </h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Your Inquiries</h1>
 
-          {/* Search */}
-          <div className="relative mb-4">
-            <input
-              type="text"
-              placeholder="Search inquiries..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          {/* Filter */}
-          <div className="flex gap-2 mb-4">
-            {FILTER_OPTIONS.map(option => (
-              <button
-                key={option}
-                className={`px-3 py-1 rounded ${
-                  filterStatus === option ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
-                } text-sm`}
-                onClick={() => setFilterStatus(option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-
-          {/* Bulk Actions */}
-          {selectedIds.size > 0 && (
-            <div className="mb-4 flex flex-col gap-2">
-              <div className="flex justify-between items-center text-sm text-gray-500">
-                <span>{selectedIds.size} selected</span>
-                <div className="flex gap-2">
-                  <button onClick={selectAll} className="px-2 py-1 bg-gray-200 rounded text-sm">
-                    Select All
-                  </button>
-                  <button onClick={deselectAll} className="px-2 py-1 bg-gray-200 rounded text-sm">
-                    Deselect All
-                  </button>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => bulkMarkReadUnread(true)}
-                  className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm flex items-center gap-1"
-                >
-                  <EyeOff size={14} /> Mark as Read
-                </button>
-                <button
-                  onClick={() => bulkMarkReadUnread(false)}
-                  className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-sm flex items-center gap-1"
-                >
-                  <Eye size={14} /> Mark as Unread
-                </button>
-                <button
-                  onClick={bulkClose}
-                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded text-sm flex items-center gap-1"
-                >
-                  <X size={14} /> Close
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Inquiry List */}
-          {filteredInquiries.length === 0 && <p className="text-gray-500">No inquiries found.</p>}
-          <ul className="space-y-2">
-            {Object.entries(groupedInquiries).map(([groupName, groupItems]) =>
-              groupItems.length > 0 ? (
-                <li key={groupName}>
-                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">{groupName}</p>
-                  {groupItems.map(inquiry => (
-                    <div
-                      key={inquiry.id}
-                      className={`relative p-3 bg-white rounded-lg shadow hover:shadow-md cursor-pointer flex justify-between items-start transition ${
-                        selectedInquiry?.id === inquiry.id ? 'ring-2 ring-indigo-500' : ''
-                      }`}
+      {inquiries.length === 0 ? (
+        <p className="text-gray-500">No inquiries found.</p>
+      ) : (
+        <div className="overflow-x-auto border rounded-lg">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left">Collector Email</th>
+                <th className="px-4 py-2 text-left">Artwork</th>
+                <th className="px-4 py-2 text-left">Message</th>
+                <th className="px-4 py-2 text-left">Status</th>
+                <th className="px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {inquiries.map((inq) => (
+                <tr key={inq.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2">{inq.contact_email}</td>
+                  <td className="px-4 py-2">{inq.artworks?.title || '-'}</td>
+                  <td className="px-4 py-2">{inq.message.slice(0, 50)}...</td>
+                  <td className="px-4 py-2">{inq.status}</td>
+                  <td className="px-4 py-2">
+                    <button
+                      onClick={() => openModal(inq)}
+                      className="text-blue-600 hover:underline flex items-center"
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(inquiry.id)}
-                        onChange={() => toggleSelect(inquiry.id)}
-                        className="mr-2 mt-1"
-                      />
-                      <div
-                        className="flex-1 flex flex-col gap-1"
-                        onClick={() => setSelectedInquiry(inquiry)}
-                      >
-                        <p className="font-medium">{inquiry.artworks?.title || 'Unknown Artwork'}</p>
-                        <p className="text-sm text-gray-500">{inquiry.collector?.name || inquiry.contact_email}</p>
-                        <p className="text-sm mt-1 text-gray-700 line-clamp-2">{inquiry.message}</p>
-                      </div>
-                      <span
-                        className={`ml-2 px-2 py-1 text-xs font-semibold rounded-full ${
-                          STATUS_COLORS[inquiry.status] || 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {inquiry.status || 'pending'}
-                      </span>
-                      {unreadIds.has(inquiry.id) && (
-                        <Eye className="absolute top-2 right-2 text-indigo-500" size={16} />
-                      )}
-                    </div>
-                  ))}
-                </li>
-              ) : null
-            )}
-          </ul>
+                      <Eye className="h-4 w-4 mr-1" /> View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </aside>
+      )}
 
-      {/* Detail Panel */}
-      <main className="flex-1 p-6 overflow-y-auto">
-        {selectedInquiry ? (
-          <div className="bg-white rounded-lg shadow p-6 space-y-4 max-w-3xl mx-auto">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Inquiry from {selectedInquiry.contact_email}</h2>
-              <button
-                className="p-1 rounded hover:bg-gray-100"
-                onClick={() => {
-                  setSelectedInquiry(null)
-                  setResponseMessage('')
-                }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-gray-600">Artwork: {selectedInquiry.artworks?.title || 'Unknown'}</p>
-            <p className="mt-2 text-gray-700">{selectedInquiry.message}</p>
-
-            {selectedInquiry.status === 'pending' && (
-              <>
-                <textarea
-                  className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Type your response..."
-                  value={responseMessage}
-                  onChange={e => setResponseMessage(e.target.value)}
-                  rows={5}
-                />
-                <button
-                  className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-2"
-                  onClick={() => respondToInquiry(selectedInquiry)}
-                >
-                  <Send size={16} /> Send Response
-                </button>
-              </>
-            )}
-
-            {selectedInquiry.response_message && (
-              <div className="mt-4 p-4 bg-green-50 rounded text-green-800">
-                <strong>Response Sent:</strong> {selectedInquiry.response_message}
-              </div>
-            )}
-
-            <button
-              className="mt-4 text-sm text-indigo-600 hover:underline flex items-center gap-1"
-              onClick={() => toggleUnread(selectedInquiry.id)}
-            >
-              {unreadIds.has(selectedInquiry.id) ? <EyeOff size={14} /> : <Eye size={14} />}
-              Mark {unreadIds.has(selectedInquiry.id) ? 'as Read' : 'as Unread'}
-            </button>
-          </div>
-        ) : (
-          <div className="text-gray-400 text-center mt-20">Select an inquiry to view details</div>
-        )}
-      </main>
+      {modalOpen && selectedInquiry && (
+        <Modal onClose={closeModal} title="Inquiry Details">
+          <p><strong>Collector Email:</strong> {selectedInquiry.contact_email}</p>
+          <p><strong>Artwork:</strong> {selectedInquiry.artworks?.title || '-'}</p>
+          <p><strong>Message:</strong> {selectedInquiry.message}</p>
+          <p><strong>Status:</strong> {selectedInquiry.status}</p>
+        </Modal>
+      )}
     </div>
   )
 }
