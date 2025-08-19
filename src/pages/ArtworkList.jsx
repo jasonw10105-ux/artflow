@@ -57,6 +57,7 @@ const ArtworkList = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Artwork Management</h1>
         <button
@@ -67,6 +68,7 @@ const ArtworkList = () => {
         </button>
       </div>
 
+      {/* Search & Filter */}
       <div className="flex gap-4 mb-6">
         <input
           type="text"
@@ -83,6 +85,7 @@ const ArtworkList = () => {
         </select>
       </div>
 
+      {/* Artworks Grid */}
       {filteredArtworks.length === 0 ? (
         <div className="text-center py-12">
           <ImageIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
@@ -117,6 +120,20 @@ const ArtworkList = () => {
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+
+                    {artwork.unique_url && (
+                      <div className="flex space-x-2">
+                        <a href={artwork.unique_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">
+                          Open Link
+                        </a>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(artwork.unique_url) && toast.success('Copied!')}
+                          className="text-sm text-gray-500 underline"
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -125,6 +142,7 @@ const ArtworkList = () => {
         </div>
       )}
 
+      {/* Upload Artwork Modal */}
       <UploadArtworkModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
