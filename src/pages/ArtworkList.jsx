@@ -3,8 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import { Trash2, Edit, Image as ImageIcon } from 'lucide-react'
-import UploadArtworkModal from '../lib/UploadArtworkModal'
 import { Link } from 'react-router-dom'
+import UploadArtworkModal from '../lib/UploadArtworkModal'
 
 const ArtworkList = () => {
   const { profile } = useAuth()
@@ -25,11 +25,10 @@ const ArtworkList = () => {
         .select('*')
         .eq('artist_id', profile.id)
         .order('created_at', { ascending: false })
-
       if (error) throw error
       setArtworks(data || [])
     } catch (err) {
-      console.error(err)
+      console.error('Error fetching artworks:', err)
       toast.error('Failed to load artworks')
     } finally {
       setLoading(false)
@@ -60,10 +59,14 @@ const ArtworkList = () => {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Artwork Management</h1>
-        <button onClick={() => setIsModalOpen(true)} className="btn-primary">Upload Artwork</button>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="btn-primary"
+        >
+          Upload Artwork
+        </button>
       </div>
 
-      {/* Search & Filter */}
       <div className="flex gap-4 mb-6">
         <input
           type="text"
@@ -102,7 +105,7 @@ const ArtworkList = () => {
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-900 mb-1">{artwork.title || 'Untitled'}</h3>
                   <p className="text-sm text-gray-600 mb-2">
-                    {artwork.medium || 'Unknown Medium'} • {artwork.year || 'N/A'} • ${artwork.price?.toFixed(2) || '0.00'}
+                    {artwork.medium || 'Unknown Medium'} • {artwork.year || 'N/A'} • ${artwork.price?.toFixed(2)}
                   </p>
 
                   <div className="flex justify-between items-center mt-2">
@@ -122,7 +125,11 @@ const ArtworkList = () => {
         </div>
       )}
 
-      <UploadArtworkModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} profile={profile} />
+      <UploadArtworkModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        profile={profile}
+      />
     </div>
   )
 }
